@@ -12,6 +12,22 @@ Download **AnimeRift_Clicker.rbxl**, open it in **Roblox Studio → File → Ope
 
 There are no boss arenas, combat skills, boss rewards, combat HUD, or accepted boss/attack requests. Existing saved strength becomes banked clicker power; old wins remain archived in save data but are not shown or used. The DataStore name is unchanged.
 
+## Joining and expanded roster
+
+Players now see an animated **Anime Rift Clicker** title screen on joining, with a scenic map camera, three-step introduction and a Play button. The game HUD and input remain blocked while profiles load. Slow connections offer Retry; selecting Play restores the camera and movement, fades the title out, and welcomes the player. It appears once per session and does not return on respawn. Mouse/touch, Enter and gamepad A are supported.
+
+The roster now has **40 fighters**, including these 19 additions:
+
+| Rarity | Added fighters |
+| --- | --- |
+| Rare | Kid Naruto |
+| Legendary | Eren Yeager, Denji, Yuta Okkotsu, Super Saiyan Goku |
+| Mythic | Yuji Itadori, Deku, Jotaro Kujo, Dio, Gogeta, Vegito, Super Saiyan Blue Goku |
+| Secret | Beerus, Boros, Saitama, Golden Experience Requiem |
+| Super Secret | Awakened Aizen, Broly, Simon |
+
+The added fighters use stylized built-in block outfits and accessories, including caps, headbands, ears, collars, ties and capes; they do not include newly uploaded anime meshes or animation/audio assets. Inventory previews and live avatars share the same accessory builder. All additions are rollable with earned coins. Tier probabilities are unchanged; each tier's chance is divided across its expanded pool. The odds screens calculate the exact per-fighter values from the current roster. Previously owned fighters and the save-store name are preserved.
+
 ## Inventory and map
 
 The inventory follows the latest reference: orange studded header, charcoal panels, rarity-colored cards, and individual equip buttons. **Equip Best** picks your strongest owned fighter; **Unequip All** returns to baseline clicking. Search matches names or rarities and keeps keyboard focus while filtering. **Recycle** needs a second confirmation click within eight seconds and only sells extra copies for 25 coins each; it retains one of every fighter, including the equipped fighter. The grid uses five columns on desktop and three on portrait phones.
@@ -42,13 +58,13 @@ Checks without rebuilding:
 python3 tools/validate.py --luau /path/to/luau --compiler /path/to/luau-compile
 ```
 
-92 automated checks pass. The suite executes the actual config, profiles, economy, map, layout, client UI and server request/receipt code with deterministic engine stand-ins. It checks odds, pending-power sales, repeated-sale/recycle protection, rebirth costs/resets/preserved collectibles, unequipped baseline power, ownership validation, profile closing, failed-save recovery, purchase receipt replay, rejection of legacy combat actions, map repeatability, six stations, six viewport sizes, search and menu wiring. The simulated DataStore outage warning is intentional. Binary conversion decodes its output again and verifies instance and script counts/sources.
+142 automated checks pass. The suite executes the actual config, profiles, economy, map, layout, client UI and server request/receipt code with deterministic engine stand-ins. It checks odds, pending-power sales, repeated-sale/recycle protection, rebirth costs/resets/preserved collectibles, unequipped baseline power, ownership validation, profile closing, failed-save recovery, purchase receipt replay, rejection of legacy combat actions, map repeatability, six stations, six viewport sizes, search and menu wiring, title loading/Play/retry/input/camera transitions, all 19 requested rarities and roll pools, and the new accessory builder. The simulated DataStore outage warning is intentional. Binary conversion decodes its output again and verifies instance and script counts/sources.
 
 ## Before publishing
 
 Roblox Studio cannot run in this Linux workspace. Automated checks do not validate actual rendering, physics, touch hit testing, rig replication, audio/animation permissions, or live Roblox services.
 
-- Play solo: click → sell → summon → equip → rebirth; confirm power resets and inventory remains. Check search, Equip Best, Unequip All, recycling and the daily wheel.
+- Play solo: confirm the title waits for profile loading, Play restores movement/camera, and respawning does not reopen it. Then click → sell → summon → equip → rebirth; confirm power resets and inventory remains. Check search, Equip Best, Unequip All, recycling and the daily wheel.
 - Use Studio's phone/tablet emulator and Server & Clients modes to test inventory scrolling, text entry, avatar swaps and two players interacting with stations.
 - Use a private published test for real DataStore saves/rejoins and marketplace receipts. Studio uses disposable memory data because the existing `StudioMemory=true` setting is retained.
 - Developer-product IDs remain zero until you configure products belonging to your experience. Existing owner/admin settings and imported audio are retained; review permissions for your account/experience.

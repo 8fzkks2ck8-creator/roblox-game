@@ -47,6 +47,26 @@ hero("marlon","Marlon",7)
 hero("madara","Madara Uchiha",6)
 hero("asta","Asta",5)
 hero("gear5_luffy","Luffy (Gear 5)",6)
+-- Expanded roster; all added fighters are available through earned-coin summons.
+hero("yuji","Yuji Itadori",5)
+hero("eren","Eren Yeager",4)
+hero("deku","Deku",5)
+hero("kid_naruto","Kid Naruto",3)
+hero("awakened_aizen","Awakened Aizen",7)
+hero("denji","Denji",4)
+hero("beerus","Beerus",6)
+hero("boros","Boros",6)
+hero("saitama","Saitama",6)
+hero("jotaro","Jotaro Kujo",5)
+hero("dio","Dio",5)
+hero("golden_experience_requiem","Golden Experience Requiem",6)
+hero("yuta","Yuta Okkotsu",4)
+hero("gogeta","Gogeta",5)
+hero("vegito","Vegito",5)
+hero("ssb_goku","Goku (Super Saiyan Blue)",5)
+hero("ssj_goku","Goku (Super Saiyan)",4)
+hero("broly","Broly",7)
+hero("simon","Simon",7)
 -- Original block-built prototype outfits (no imported anime meshes or art).
 C.Outfits = {
  madara={Skin={239,198,171},Cloth={154,46,48},Hair={25,24,35}},
@@ -71,6 +91,26 @@ C.Outfits = {
  aizen={Skin={242,195,153},Cloth={236,231,241},Hair={94,57,47}},
  ui_goku={Skin={242,195,153},Cloth={246,132,40},Hair={221,229,243}},
 }
+-- Stylized built-in outfits for the expanded roster; no mesh uploads required.
+C.Outfits.yuji={Skin={242,196,169},Cloth={30,35,57},Hair={237,133,154},Collar={181,42,52}}
+C.Outfits.eren={Skin={236,195,159},Cloth={72,91,65},Legs={51,49,44},Hair={72,46,31},Cape={51,83,53}}
+C.Outfits.deku={Skin={241,202,173},Cloth={30,130,108},Legs={34,93,81},Hair={25,83,58},Collar={203,219,214}}
+C.Outfits.kid_naruto={Skin={243,199,155},Cloth={247,139,35},Hair={255,215,64},Headband={65,93,153},Collar={46,81,159}}
+C.Outfits.awakened_aizen={Skin={241,206,181},Cloth={246,243,250},Hair={91,53,43},Collar={196,153,233},Cape={235,230,247}}
+C.Outfits.denji={Skin={242,196,158},Cloth={240,239,230},Legs={49,43,42},Hair={236,186,64},Tie={34,30,33}}
+C.Outfits.beerus={Skin={157,105,185},Cloth={54,116,188},Legs={49,84,154},Bald=true,Ears={157,105,185},Collar={238,203,65}}
+C.Outfits.boros={Skin={139,184,212},Cloth={72,51,107},Hair={224,121,220},Headband={220,40,80}}
+C.Outfits.saitama={Skin={242,199,154},Cloth={248,210,39},Bald=true,Cape={241,242,244},Collar={203,52,45}}
+C.Outfits.jotaro={Skin={239,192,156},Cloth={32,35,48},Hair={26,28,33},Hat={30,33,43},Collar={224,191,63}}
+C.Outfits.dio={Skin={240,199,153},Cloth={239,197,44},Hair={245,217,77},Headband={88,184,84},Collar={67,153,65}}
+C.Outfits.golden_experience_requiem={Skin={241,204,75},Cloth={229,182,60},Legs={226,187,66},Hair={173,76,196},Headband={177,80,198}}
+C.Outfits.yuta={Skin={240,199,174},Cloth={237,238,239},Legs={39,46,66},Hair={29,32,47},Collar={193,200,219}}
+C.Outfits.gogeta={Skin={242,190,145},Cloth={232,132,45},Legs={243,242,232},Hair={31,31,39},Collar={38,41,53}}
+C.Outfits.vegito={Skin={242,190,145},Cloth={40,88,177},Hair={30,29,35},Collar={236,128,42}}
+C.Outfits.ssb_goku={Skin={242,195,153},Cloth={247,132,37},Hair={49,203,246},Collar={42,93,174}}
+C.Outfits.ssj_goku={Skin={242,195,153},Cloth={247,132,37},Hair={255,222,58},Collar={42,93,174}}
+C.Outfits.broly={Skin={225,181,139},Cloth={117,69,164},Hair={130,235,61},Collar={126,210,53}}
+C.Outfits.simon={Skin={240,194,157},Cloth={36,66,135},Hair={38,61,126},Collar={214,47,63},Cape={187,41,56}}
 C.Cosmetics = {}
 for tier,name in ipairs({"Ember Band","Jade Orbit","Azure Halo","Solar Crown","Void Wings","Celestial Eclipse"}) do
  table.insert(C.Cosmetics,{Id="aura"..tier,Name=name,Tier=tier,Power=tier*.1,Color=C.Colors[tier]})

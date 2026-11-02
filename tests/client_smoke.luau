@@ -39,7 +39,7 @@ function methods:Clone()
  return result
 end
 function methods:Play() end
-local guiClasses={Frame=true,TextLabel=true,TextButton=true,ImageLabel=true,ImageButton=true,ViewportFrame=true,ScrollingFrame=true,TextBox=true}
+local guiClasses={CanvasGroup=true,Frame=true,TextLabel=true,TextButton=true,ImageLabel=true,ImageButton=true,ViewportFrame=true,ScrollingFrame=true,TextBox=true}
 local oldIsA=methods.IsA
 methods.IsA=function(self,class) return class=="GuiObject" and guiClasses[self.ClassName]==true or oldIsA(self,class) end
 local oldNew=Instance.new
@@ -76,7 +76,7 @@ local delays={}
 task.delay=function(seconds,fn) table.insert(delays,{Seconds=seconds,Fn=fn}) end
 local rs=Instance.new("ReplicatedStorage")
 local shared=Instance.new("Folder",rs);shared.Name="AnimeRift";shared:SetAttribute("ServerStatus","Ready")
-for _,name in ipairs({"Config","Polish","ClientLayout"}) do local module=Instance.new("ModuleScript",shared);module.Name=name end
+for _,name in ipairs({"Config","Polish","ClientLayout","TitleScreen","OutfitDetails"}) do local module=Instance.new("ModuleScript",shared);module.Name=name end
 local request=Instance.new("RemoteFunction",shared);request.Name="Request"
 local events=Instance.new("RemoteEvent",shared);events.Name="Event"
 local user=Instance.new("Player");user.UserId=123
@@ -89,23 +89,44 @@ services.TweenService={Create=function(_,instance,info,props) return {Play=funct
 services.UserInputService={InputBegan=signal(),GetFocusedTextBox=function() return nil end}
 services.ProximityPromptService={PromptShown=signal(),PromptHidden=signal()}
 services.RunService.RenderStepped=signal()
+local movementBlocked=false
+services.ContextActionService={BindActionAtPriority=function() movementBlocked=true end,UnbindAction=function() movementBlocked=false end}
 workspace.CurrentCamera=Instance.new("Camera");workspace.CurrentCamera.ViewportSize=Vector2.new(390,844)
+local titleModule=loadstring(TITLE_SOURCE,"TitleScreen")()
+local detailsModule=loadstring(DETAILS_SOURCE,"OutfitDetails")()
 local polishStub={Aura=function() end,ClearGuard=function() end,Train=function() end,Pulse=function() end,Guard=function() end}
 require=function(target)
- if target.Name=="Config" then return C elseif target.Name=="Polish" then return polishStub elseif target.Name=="ClientLayout" then return L end
+ if target.Name=="TitleScreen" then return titleModule elseif target.Name=="OutfitDetails" then return detailsModule elseif target.Name=="Config" then return C elseif target.Name=="Polish" then return polishStub elseif target.Name=="ClientLayout" then return L end
  error("Unexpected require")
 end
 loadstring(CLIENT_SOURCE,"Client")()
 local ui=playerGui:FindFirstChild("AnimeRiftUI");check(ui~=nil,"client builds the UI on a portrait phone")
 local canvas=ui:FindFirstChildOfClass("Frame")
-local data={ServerTime=os.time(),Coins=1000,Gems=0,Wins=0,Strength=0,SellValue=0,Rebirths=0,RebirthCost=C.RebirthCost(0),ClickGain=1,Characters={yamcha=1},Cosmetics={},Equipped="yamcha",Aura="",LuckUntil=0,WheelReady=true,Studio=true,PaidAllowed=true}
-events.OnClientEvent:Fire("State",data)
 local function findButton(text,parent)
  for _,item in ipairs((parent or canvas):GetDescendants()) do
   if item:IsA("TextButton") and item:FindFirstChild("Label") and item.Label.Text==text then return item end
  end
  error("Missing button: "..text)
 end
+local titleGui=playerGui:FindFirstChild("AnimeRiftTitleScreen")
+check(titleGui~=nil and not canvas.Visible,"joining shows the title and hides the gameplay HUD")
+check(movementBlocked and workspace.CurrentCamera.CameraType.Name=="Scriptable","title blocks movement and owns the scenic camera")
+local playTitle=titleGui:FindFirstChild("TitleBackdrop"):FindFirstChild("TitleCard"):FindFirstChild("TitlePlayButton")
+playTitle.Activated:Fire()
+check(not canvas.Visible and not user:GetAttribute("RiftTitleSeen"),"Play cannot bypass profile loading")
+local data={ServerTime=os.time(),Coins=1000,Gems=0,Wins=0,Strength=0,SellValue=0,Rebirths=0,RebirthCost=C.RebirthCost(0),ClickGain=1,Characters={yamcha=1},Cosmetics={},Equipped="yamcha",Aura="",LuckUntil=0,WheelReady=true,Studio=true,PaidAllowed=true}
+events.OnClientEvent:Fire("State",data)
+check(playTitle.Label.Text=="PLAY","loaded profile enables the title Play button")
+findButton("SHOP").Activated:Fire()
+check(not canvas.ModalBackdrop.Visible,"gameplay menus cannot open behind the title")
+playTitle.Activated:Fire()
+check(canvas.Visible and not movementBlocked and user:GetAttribute("RiftTitleSeen"),"Play reveals the HUD and restores movement")
+check(workspace.CurrentCamera.CameraType.Name=="Custom","Play restores the player camera")
+for _,delay in ipairs(delays) do if delay.Seconds==.42 then delay.Fn() end end
+check(playerGui:FindFirstChild("AnimeRiftTitleScreen")==nil,"title transition removes its overlay")
+local resumed=false
+titleModule.Mount({Player=user,Parent=playerGui,OnPlay=function() resumed=true end})
+check(resumed and not playerGui:FindFirstChild("AnimeRiftTitleScreen"),"title is shown once per player session")
 findButton("SHOP").Activated:Fire()
 local backdrop=canvas:FindFirstChild("ModalBackdrop")
 check(backdrop.Visible,"store opens its modal backdrop")
@@ -140,3 +161,29 @@ check(findButton("REBIRTH • "..L.Number(data.RebirthCost).." COINS")~=nil,"reb
 local noBossButtons=true
 for _,item in ipairs(canvas:GetDescendants()) do if item:IsA("TextLabel") and type(item.Text)=="string" and (item.Text:find("BOSS",1,true) or item.Text:find("GUARD",1,true)) then noBossButtons=false end end
 check(noBossButtons,"client builds no boss or guard controls")
+
+-- The actual shared accessory builder runs for all new outfits, not a UI stub.
+for id in pairs(additions) do
+ local rig=Instance.new("Model")
+ local head=Instance.new("Part",rig);head.Name="Head";head.Size=Vector3.new(2,1,1);head.CFrame=CFrame.new(0,3,0)
+ local body=Instance.new("Part",rig);body.Name="Torso";body.Size=Vector3.new(2,2,1);body.CFrame=CFrame.new(0,1.5,0)
+ local details=Instance.new("Folder",rig)
+ detailsModule.Apply(rig,C.Outfits[id],details,false)
+ local count=0;local safe=true
+ for _,item in ipairs(details:GetDescendants()) do
+  if item.ClassName=="Part" or item.ClassName=="WedgePart" then
+   count+=1;if item.CanCollide or item.CanTouch or not item.Massless then safe=false end
+  end
+ end
+ check(count>0 and safe,"new outfit details attach without collision: "..id)
+end
+local retryUser=Instance.new("Player");local retryReady=false;local attempts=0;local retryPlayed=false
+local retryTitle=titleModule.Mount({Player=retryUser,Parent=playerGui,IsReady=function() return retryReady end,ServerStatus=function() return retryReady and "Ready" or "Error" end,OnRetry=function() attempts+=1 end,OnPlay=function() retryPlayed=true end})
+local retryGui=playerGui:FindFirstChild("AnimeRiftTitleScreen")
+local retryPlay=retryGui.TitleBackdrop.TitleCard.TitlePlayButton
+retryPlay.Activated:Fire()
+check(attempts==1 and not retryPlayed and retryTitle:IsOpen(),"title exposes retry without bypassing an unavailable server")
+retryReady=true;retryTitle:Refresh()
+services.UserInputService.InputBegan:Fire({KeyCode=Enum.KeyCode.Return},false)
+check(retryPlayed and not movementBlocked,"Enter starts a ready title and restores controls")
+for _,delay in ipairs(delays) do if delay.Seconds==.42 then delay.Fn() end end

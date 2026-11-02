@@ -21,7 +21,7 @@ function F.__mul(a,b)
 end
 Color3={new=function(r,g,b) return {_type="Color3",R=r,G=g,B=b} end,fromRGB=function(r,g,b) return {_type="Color3",R=r/255,G=g/255,B=b/255} end}
 UDim2={fromOffset=function(x,y) return {_type="UDim2",X=x,Y=y} end,fromScale=function(x,y) return {_type="UDim2",XS=x,YS=y} end}
-Enum=setmetatable({},{__index=function(t,k) local v=setmetatable({},{__index=function(_,n) return {_type="Enum",Group=k,Name=n} end});rawset(t,k,v);return v end})
+Enum=setmetatable({},{__index=function(t,k) local v=setmetatable({},{__index=function(t,n) local value={_type="Enum",Group=k,Name=n};rawset(t,n,value);return value end});rawset(t,k,v);return v end})
 local methods={}
 local nodeMeta={__index=function(t,k)
  if methods[k] then return methods[k] end

@@ -100,3 +100,18 @@ for _,size in ipairs({{390,844},{415,739},{768,1024},{1366,768},{1920,1080},{844
 end
 check(L.Measure(390,844).Portrait and not L.Measure(1366,768).Portrait,"phone and desktop select distinct layouts")
 check(#L.Number(1000000000)<=6 and L.Number(0)=="0","large power and currency fit HUD labels")
+
+-- Every requested addition has its promised rarity and a reachable roll pool.
+local additions={yuji=5,eren=4,deku=5,kid_naruto=3,awakened_aizen=7,denji=4,beerus=6,boros=6,saitama=6,jotaro=5,dio=5,golden_experience_requiem=6,yuta=4,gogeta=5,vegito=5,ssb_goku=5,ssj_goku=4,broly=7,simon=7}
+local ids={};local unique=true
+for _,hero in ipairs(C.Characters) do if ids[hero.Id] then unique=false end;ids[hero.Id]=true end
+check(#C.Characters==40 and unique,"expanded roster has 40 unique fighters")
+for id,tier in pairs(additions) do
+ local hero=C.Find(C.Characters,id)
+ local odds=C.Odds(false,false,C.Characters);local start=0
+ for i=1,tier-1 do start+=odds[i] end
+ local pool={};for _,candidate in ipairs(C.Characters) do if candidate.Tier==tier and candidate.Rollable~=false then table.insert(pool,candidate.Id) end end
+ local index=table.find(pool,id)
+ local rng={NextNumber=function() return start+odds[tier]/2 end,NextInteger=function(_,a,b) assert(index and index>=a and index<=b);return index end}
+ check(hero and hero.Tier==tier and C.Outfits[id] and C.Roll(C.Characters,false,false,rng).Id==id,"requested rarity and summon availability: "..id)
+end

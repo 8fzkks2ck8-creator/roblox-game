@@ -976,9 +976,14 @@ local folder=RS:WaitForChild("AnimeRift")
 local C=require(folder:WaitForChild("Config"))
 local Polish=require(folder:WaitForChild("Polish"))
 local Layout=require(folder:WaitForChild("ClientLayout"))
+local TitleScreen=require(folder:WaitForChild("TitleScreen"))
+local OutfitDetails=require(folder:WaitForChild("OutfitDetails"))
 local Request=folder:WaitForChild("Request"); local Event=folder:WaitForChild("Event")
 local ui=Instance.new("ScreenGui"); ui.Name="AnimeRiftUI"; ui.ResetOnSpawn=false; ui.ZIndexBehavior=Enum.ZIndexBehavior.Sibling; ui.Parent=p:WaitForChild("PlayerGui")
 local canvas=Instance.new("Frame",ui); canvas.Size=UDim2.fromOffset(1200,760); canvas.AnchorPoint=Vector2.new(0.5,0.5); canvas.Position=UDim2.fromScale(0.5,0.5); canvas.BackgroundTransparency=1
+canvas.Visible=false
+local titleActive=true
+local titleScreen
 local scale=Instance.new("UIScale",canvas)
 local state,page,render
 local renderInventory
@@ -1091,6 +1096,7 @@ local function notify(text)
  task.delay(4,function() if toastSerial==serial then Tween:Create(toast,TweenInfo.new(0.2),{Position=UDim2.new(.5,0,0,-65)}):Play(); task.wait(0.2); if toastSerial==serial then toast.Visible=false end end end)
 end
 local function call(action,arg)
+ if titleActive and action~="State" then return end
  if revealing and action~="State" then notify("Finish your character reveal first."); return end
  if busy then if action~="State" and action~="Train" then notify("Finishing your previous action...") end; return end
  if folder:GetAttribute("ServerStatus")=="Error" then
@@ -1176,6 +1182,7 @@ local function action(text,color,fn)
  rowNumber=rowNumber+1; local b=button(list,text,contentWidth,52,color,fn); b.LayoutOrder=rowNumber; return b
 end
 open=function(name)
+ if titleActive then return end
  if revealing then return end
  menuSerial+=1;page=name; window.Visible=true;dim.Visible=true; sound("Open",0.85); render()
  window.Position=modalPosition+UDim2.fromOffset(0,18); Tween:Create(window,TweenInfo.new(0.25,Enum.EasingStyle.Back),{Position=modalPosition}):Play()
@@ -1240,6 +1247,7 @@ local goalText=label(canvas,"Click to collect power\nSell power for coins\nSummo
 local practice=button(canvas,"REBIRTH BONUSES",205,43,palette.Mint,function() open("Rebirth") end);practice.Position=UDim2.fromOffset(10,520)
 local lastTrain=-math.huge
 local function train()
+ if titleActive then return end
  if not state or page or window.Visible or revealing or Input:GetFocusedTextBox() then return end
  if os.clock()-lastTrain&lt;C.Training.Interval then return end
  lastTrain=os.clock();call("Train")
@@ -1301,11 +1309,12 @@ local function portrait(parent,id,pos,size,spin)
  block("Body",Vector3.new(1.4,1.6,0.7),Vector3.new(0,0.2,0),outfit.Cloth)
  for _,side in ipairs({-1,1}) do
   block("Arm",Vector3.new(0.5,1.5,0.6),Vector3.new(side,0.2,0),outfit.Skin)
-  block("Leg",Vector3.new(0.6,1.2,0.65),Vector3.new(side*0.36,-1.2,0),outfit.Cloth)
+  block("Leg",Vector3.new(0.6,1.2,0.65),Vector3.new(side*0.36,-1.2,0),outfit.Legs or outfit.Cloth)
  end
- if not outfit.Bald then
+ if not outfit.Bald and not outfit.Hat then
   for i=-2,2 do local hair=block("Hair",Vector3.new(0.25,0.5,0.8),Vector3.new(i*0.2,2,0),outfit.Hair); hair.Rotation=Vector3.new(0,0,-i*12) end
  end
+ OutfitDetails.Apply(display,outfit,display,true)
  if spin then spinningPreviews[view]={Model=display,Base=display:GetPivot(),Started=os.clock()} end
  return view
 end
@@ -1452,7 +1461,7 @@ render=function()
    if purchaseButton.Parent then purchaseButton.Label.Text=ok and info.IsForSale and ("BUY • "..tostring(info.PriceInRobux).." ROBUX") or "Unavailable on Roblox" end
   end) end
   if not state.PaidAllowed then row("Paid rolls and luck are unavailable for this account. You can still sell power, rebirth, redeem codes, and spin without paid luck.",75) end
-  row("2x luck doubles the actual probability of Rare and higher tiers. Standard Secret: 0.01% → 0.02%. Boosted Secret: 0.1% → 0.2%. Secrets split equally between all rollable Secret fighters. Marlon: 0.001% standard; 0.01% boosted; luck doubles both.",90)
+  row("2x luck doubles the actual probability of Rare and higher tiers. Standard Secret: 0.01% → 0.02%. Boosted Secret: 0.1% → 0.2%. Each tier splits equally between its rollable fighters. See the live per-fighter odds below; luck doubles Rare and higher tier odds.",90)
   odds(false,false); odds(false,true)
   if selectedProduct=="Luck" then row("Luck also applies to cosmetic rolls:",40); odds(true,false); odds(true,true) end
  elseif page=="Admin" then
@@ -1569,7 +1578,7 @@ local function party(data)
  end)
 end
 apply=function(s)
- if not s then return end; state=s;Polish.Aura(p.Character,s.Aura); offset=s.ServerTime-os.time()
+ if not s then return end; state=s;if titleScreen then titleScreen:Refresh() end;Polish.Aura(p.Character,s.Aura); offset=s.ServerTime-os.time()
  if coinTween then coinTween:Cancel() end;if gemTween then gemTween:Cancel() end
  coinTween=Tween:Create(coinCounter,TweenInfo.new(.28,Enum.EasingStyle.Quad),{Value=s.Coins});coinTween:Play()
  gemTween=Tween:Create(gemCounter,TweenInfo.new(.28,Enum.EasingStyle.Quad),{Value=s.Gems});gemTween:Play();winsLabel.Text=(s.Rebirths or 0).." REBIRTHS"
@@ -1585,7 +1594,7 @@ Event.OnClientEvent:Connect(function(kind,data)
   if data.Gain&gt;0 then floating("+"..data.Gain.." POWER",palette.Gold) end;Polish.Train(p.Character,state and state.Equipped);sound("Click",1.15)
  elseif kind=="OpenMenu" then open(data)
  elseif kind=="Toast" then notify(data)
- elseif kind=="Reveal" then playReveal(data)
+ elseif kind=="Reveal" then if titleActive then table.insert(revealQueue,data) else playReveal(data) end
  elseif kind=="AdminEvent" then party(data)
  elseif kind=="ClickerReward" then
   Polish.Pulse(.15)
@@ -1607,6 +1616,7 @@ Event.OnClientEvent:Connect(function(kind,data)
  end
 end)
 Input.InputBegan:Connect(function(input,processed)
+ if titleActive then return end
  if not processed and input.KeyCode==Enum.KeyCode.F8 then open("Admin");return end
  if input.KeyCode==Enum.KeyCode.Escape and page then closeMenu();return end
  if processed or page or revealing or Input:GetFocusedTextBox() then return end
@@ -1622,7 +1632,7 @@ Prompts.PromptShown:Connect(function(prompt)
  end
 end)
 Prompts.PromptHidden:Connect(function(prompt) shownPrompts[prompt]=nil end)
-folder:GetAttributeChangedSignal("ServerStatus"):Connect(function() if page and not state then render() end end)
+folder:GetAttributeChangedSignal("ServerStatus"):Connect(function() if titleScreen then titleScreen:Refresh() end;if page and not state then render() end end)
 local lastTick=0
 Run.RenderStepped:Connect(function()
  local now=os.clock()
@@ -1653,11 +1663,11 @@ Run.RenderStepped:Connect(function()
 end)
 task.spawn(function()
  while not state do local result=call("State"); if result and result.State then apply(result.State) end; if not state then if page then render() end; task.wait(2) end end
- notify("Welcome to Anime Rift! Your first random fighter is ready.")
- sound("Open",1.2)
+ -- The title screen owns the welcome message after the player selects Play.
 end)
 
 local function bindCamera(character)
+ if titleActive then return end
  local humanoid=character:WaitForChild("Humanoid",10)
  if humanoid and p.Character==character and workspace.CurrentCamera then
   workspace.CurrentCamera.CameraType=Enum.CameraType.Custom
@@ -1722,6 +1732,19 @@ relayout=function()
  adminButton.Position=portrait and UDim2.fromOffset(540,16) or UDim2.fromOffset(1004,610)
 end
 resize()
+
+titleScreen=TitleScreen.Mount({
+ Player=p,Parent=p:WaitForChild("PlayerGui"),FighterCount=#C.Characters,
+ IsReady=function() return state~=nil and folder:GetAttribute("ServerStatus")=="Ready" end,
+ ServerStatus=function() return folder:GetAttribute("ServerStatus") end,
+ OnRetry=function() task.spawn(function() local r=call("State");if r and r.State then apply(r.State) end end) end,
+ OnPlay=function()
+  titleActive=false;canvas.Visible=true
+  if p.Character then task.spawn(bindCamera,p.Character) end
+  sound("Open",1.2);notify("Welcome to Rift Meadows! Click for power, then sell and summon.")
+  if #revealQueue&gt;0 then task.delay(.5,function() if not revealing and #revealQueue&gt;0 then playReveal(table.remove(revealQueue,1)) end end) end
+ end,
+})
 </ProtectedString></Properties>
 			</Item>
 		</Item>
@@ -2144,6 +2167,26 @@ hero("marlon","Marlon",7)
 hero("madara","Madara Uchiha",6)
 hero("asta","Asta",5)
 hero("gear5_luffy","Luffy (Gear 5)",6)
+-- Expanded roster; all added fighters are available through earned-coin summons.
+hero("yuji","Yuji Itadori",5)
+hero("eren","Eren Yeager",4)
+hero("deku","Deku",5)
+hero("kid_naruto","Kid Naruto",3)
+hero("awakened_aizen","Awakened Aizen",7)
+hero("denji","Denji",4)
+hero("beerus","Beerus",6)
+hero("boros","Boros",6)
+hero("saitama","Saitama",6)
+hero("jotaro","Jotaro Kujo",5)
+hero("dio","Dio",5)
+hero("golden_experience_requiem","Golden Experience Requiem",6)
+hero("yuta","Yuta Okkotsu",4)
+hero("gogeta","Gogeta",5)
+hero("vegito","Vegito",5)
+hero("ssb_goku","Goku (Super Saiyan Blue)",5)
+hero("ssj_goku","Goku (Super Saiyan)",4)
+hero("broly","Broly",7)
+hero("simon","Simon",7)
 -- Original block-built prototype outfits (no imported anime meshes or art).
 C.Outfits = {
  madara={Skin={239,198,171},Cloth={154,46,48},Hair={25,24,35}},
@@ -2168,6 +2211,26 @@ C.Outfits = {
  aizen={Skin={242,195,153},Cloth={236,231,241},Hair={94,57,47}},
  ui_goku={Skin={242,195,153},Cloth={246,132,40},Hair={221,229,243}},
 }
+-- Stylized built-in outfits for the expanded roster; no mesh uploads required.
+C.Outfits.yuji={Skin={242,196,169},Cloth={30,35,57},Hair={237,133,154},Collar={181,42,52}}
+C.Outfits.eren={Skin={236,195,159},Cloth={72,91,65},Legs={51,49,44},Hair={72,46,31},Cape={51,83,53}}
+C.Outfits.deku={Skin={241,202,173},Cloth={30,130,108},Legs={34,93,81},Hair={25,83,58},Collar={203,219,214}}
+C.Outfits.kid_naruto={Skin={243,199,155},Cloth={247,139,35},Hair={255,215,64},Headband={65,93,153},Collar={46,81,159}}
+C.Outfits.awakened_aizen={Skin={241,206,181},Cloth={246,243,250},Hair={91,53,43},Collar={196,153,233},Cape={235,230,247}}
+C.Outfits.denji={Skin={242,196,158},Cloth={240,239,230},Legs={49,43,42},Hair={236,186,64},Tie={34,30,33}}
+C.Outfits.beerus={Skin={157,105,185},Cloth={54,116,188},Legs={49,84,154},Bald=true,Ears={157,105,185},Collar={238,203,65}}
+C.Outfits.boros={Skin={139,184,212},Cloth={72,51,107},Hair={224,121,220},Headband={220,40,80}}
+C.Outfits.saitama={Skin={242,199,154},Cloth={248,210,39},Bald=true,Cape={241,242,244},Collar={203,52,45}}
+C.Outfits.jotaro={Skin={239,192,156},Cloth={32,35,48},Hair={26,28,33},Hat={30,33,43},Collar={224,191,63}}
+C.Outfits.dio={Skin={240,199,153},Cloth={239,197,44},Hair={245,217,77},Headband={88,184,84},Collar={67,153,65}}
+C.Outfits.golden_experience_requiem={Skin={241,204,75},Cloth={229,182,60},Legs={226,187,66},Hair={173,76,196},Headband={177,80,198}}
+C.Outfits.yuta={Skin={240,199,174},Cloth={237,238,239},Legs={39,46,66},Hair={29,32,47},Collar={193,200,219}}
+C.Outfits.gogeta={Skin={242,190,145},Cloth={232,132,45},Legs={243,242,232},Hair={31,31,39},Collar={38,41,53}}
+C.Outfits.vegito={Skin={242,190,145},Cloth={40,88,177},Hair={30,29,35},Collar={236,128,42}}
+C.Outfits.ssb_goku={Skin={242,195,153},Cloth={247,132,37},Hair={49,203,246},Collar={42,93,174}}
+C.Outfits.ssj_goku={Skin={242,195,153},Cloth={247,132,37},Hair={255,222,58},Collar={42,93,174}}
+C.Outfits.broly={Skin={225,181,139},Cloth={117,69,164},Hair={130,235,61},Collar={126,210,53}}
+C.Outfits.simon={Skin={240,194,157},Cloth={36,66,135},Hair={38,61,126},Collar={214,47,63},Cape={187,41,56}}
 C.Cosmetics = {}
 for tier,name in ipairs({"Ember Band","Jade Orbit","Azure Halo","Solar Crown","Void Wings","Celestial Eclipse"}) do
  table.insert(C.Cosmetics,{Id="aura"..tier,Name=name,Tier=tier,Power=tier*.1,Color=C.Colors[tier]})
@@ -65145,7 +65208,140 @@ end)</ProtectedString>
 					</Properties>
 				</Item>
 			</Item>
-		<Item class="ModuleScript" referent="RBX_RIFT_MODULE_Polish"><Properties><string name="Name">Polish</string><ProtectedString name="Source">-- Cosmetic client effects only. No currency, damage, or inventory changes here.
+		<Item class="ModuleScript" referent="RBX_RIFT_MODULE_TitleScreen"><Properties><string name="Name">TitleScreen</string><ProtectedString name="Source">-- Local, once-per-session welcome screen. No profile or currency mutations.
+local T={}
+local Tween=game:GetService("TweenService")
+local Run=game:GetService("RunService")
+local Input=game:GetService("UserInputService")
+local Actions=game:GetService("ContextActionService")
+local Gui=game:GetService("GuiService")
+local function round(item,radius)
+ local c=Instance.new("UICorner",item);c.CornerRadius=UDim.new(0,radius)
+end
+local function stroke(item,color,width)
+ local s=Instance.new("UIStroke",item);s.Color=color;s.Thickness=width;s.ApplyStrokeMode=Enum.ApplyStrokeMode.Border
+end
+local function text(parent,value,x,y,w,h,size,color)
+ local l=Instance.new("TextLabel",parent);l.Size=UDim2.fromOffset(w,h);l.Position=UDim2.fromOffset(x,y);l.BackgroundTransparency=1;l.Text=value;l.TextColor3=color or Color3.new(1,1,1);l.Font=Enum.Font.FredokaOne;l.TextSize=size;l.TextWrapped=true;l.TextStrokeTransparency=.12;return l
+end
+function T.Mount(ctx)
+ if ctx.Player:GetAttribute("RiftTitleSeen") then ctx.OnPlay();return {IsOpen=function() return false end,Refresh=function() end} end
+ local phase="Waiting"
+ local started=os.clock()
+ local connections={}
+ local controls,disabledControls
+ local cameraFov={}
+ local ui=Instance.new("ScreenGui",ctx.Parent);ui.Name="AnimeRiftTitleScreen";ui.DisplayOrder=100;ui.ResetOnSpawn=false;ui.IgnoreGuiInset=true;ui.ZIndexBehavior=Enum.ZIndexBehavior.Sibling
+ local backdrop=Instance.new("Frame",ui);backdrop.Name="TitleBackdrop";backdrop.Size=UDim2.fromScale(1,1);backdrop.BackgroundColor3=Color3.fromRGB(8,17,31);backdrop.BackgroundTransparency=.2;backdrop.Active=true
+ local card=Instance.new("CanvasGroup",backdrop);card.Name="TitleCard";card.AnchorPoint=Vector2.new(.5,.5);card.Position=UDim2.fromScale(.5,.54);card.Size=UDim2.fromOffset(700,620);card.BackgroundColor3=Color3.fromRGB(26,32,36);round(card,20);stroke(card,Color3.fromRGB(5,8,12),4)
+ local fit=Instance.new("UIScale",card)
+ local header=Instance.new("Frame",card);header.Size=UDim2.fromOffset(700,142);header.BackgroundColor3=Color3.new(1,1,1);header.BorderSizePixel=0;round(header,20)
+ local gradient=Instance.new("UIGradient",header);gradient.Rotation=90;gradient.Color=ColorSequence.new(Color3.fromRGB(255,187,52),Color3.fromRGB(230,93,7))
+ for y=0,4 do for x=0,24 do if (x+y)%2==0 then
+  local tile=Instance.new("Frame",header);tile.Size=UDim2.fromOffset(17,17);tile.Position=UDim2.fromOffset(10+x*28,6+y*28);tile.BackgroundColor3=Color3.new(1,1,1);tile.BackgroundTransparency=.84;tile.BorderSizePixel=0;round(tile,3)
+ end end end
+ text(header,"ANIME RIFT",20,15,660,68,58)
+ text(header,"C L I C K E R",20,84,660,42,27)
+ text(card,"WELCOME TO RIFT MEADOWS",25,166,650,36,26,Color3.fromRGB(112,237,255))
+ text(card,"Collect your favorites. Build your power.",25,206,650,30,21)
+ local steps={{"01","CLICK","Build your power"},{"02","SELL &amp; SUMMON","Collect stronger fighters"},{"03","REBIRTH","Grow your permanent bonus"}}
+ for i,step in ipairs(steps) do
+  local f=Instance.new("Frame",card);f.Size=UDim2.fromOffset(208,122);f.Position=UDim2.fromOffset(26+(i-1)*220,254);f.BackgroundColor3=Color3.fromRGB(42,51,58);round(f,12);stroke(f,Color3.fromRGB(76,91,104),1.5)
+  text(f,step[1],5,4,198,32,24,Color3.fromRGB(255,207,77))
+  text(f,step[2],5,39,198,28,21)
+  text(f,step[3],12,75,184,37,17,Color3.fromRGB(207,219,230))
+ end
+ local play=Instance.new("TextButton",card);play.Name="TitlePlayButton";play.Size=UDim2.fromOffset(420,68);play.Position=UDim2.fromOffset(140,406);play.BackgroundColor3=Color3.new(1,1,1);play.AutoButtonColor=false;play.Text="";play.Modal=true;play.Selectable=true;round(play,16);stroke(play,Color3.fromRGB(3,8,10),4)
+ local buttonGradient=Instance.new("UIGradient",play);buttonGradient.Rotation=90
+ local playLabel=text(play,"LOADING...",8,4,404,60,34);playLabel.Name="Label"
+ local buttonScale=Instance.new("UIScale",play)
+ local previousSelection=Gui.SelectedObject
+ if Input.GamepadEnabled then Gui.SelectedObject=play end
+ local status=text(card,"Getting your inventory ready...",30,488,640,44,19,Color3.fromRGB(206,218,228));status.Name="TitleStatus"
+ text(card,"Mouse / touch to play  •  Enter / A to start",25,553,650,32,17,Color3.fromRGB(155,174,192))
+ if ctx.FighterCount then text(card,ctx.FighterCount.." FIGHTERS • 7 RARITIES",25,589,650,22,14,Color3.fromRGB(136,157,177)) end
+ local function cameraView()
+  local camera=workspace.CurrentCamera;if not camera then return end
+  if cameraFov[camera]==nil then cameraFov[camera]=camera.FieldOfView or 70 end
+  camera.CameraType=Enum.CameraType.Scriptable;camera.FieldOfView=64
+  local t=(os.clock()-started)*.09
+  camera.CFrame=CFrame.lookAt(Vector3.new(49+math.sin(t)*10,29,79+math.cos(t)*7),Vector3.new(0,6,-36))
+ end
+ local function resize()
+  local camera=workspace.CurrentCamera;if not camera then return end
+  fit.Scale=math.max(.01,math.min((camera.ViewportSize.X-28)/700,(camera.ViewportSize.Y-54)/620,1.1))
+ end
+ local function cleanUp()
+  for _,connection in ipairs(connections) do connection:Disconnect() end
+  table.clear(connections)
+  ui:Destroy();phase="Closed"
+ end
+ local controller={}
+ local lastStatus
+ function controller:IsOpen() return phase~="Closed" end
+ function controller:Refresh()
+  if phase=="Closing" or phase=="Closed" then return end
+  local ready=ctx.IsReady()
+  local errorState=ctx.ServerStatus()=="Error"
+  local retry=not ready and (errorState or os.clock()-started&gt;=12)
+  local statusKey=ready and "Ready" or errorState and "Error" or retry and "Slow" or "Loading"
+  if statusKey==lastStatus then return end;lastStatus=statusKey
+  playLabel.Text=ready and "PLAY" or retry and "RETRY CONNECTION" or "LOADING..."
+  buttonGradient.Color=ready and ColorSequence.new(Color3.fromRGB(182,255,63),Color3.fromRGB(61,194,26)) or ColorSequence.new(Color3.fromRGB(117,139,158),Color3.fromRGB(65,85,105))
+  status.Text=ready and "Your fighters are ready. Let's get clicking!" or errorState and "The server could not start. Retry or rejoin to reconnect." or retry and "Still connecting. Select Retry to check again." or "Getting your inventory ready..."
+ end
+ local function begin()
+  if phase~="Waiting" then return end
+  if not ctx.IsReady() then
+   if ctx.ServerStatus()=="Error" or os.clock()-started&gt;=12 then ctx.OnRetry() end
+   controller:Refresh();return
+  end
+  phase="Closing";ctx.Player:SetAttribute("RiftTitleSeen",true)
+  Actions:UnbindAction("RiftJoinTitle")
+  if Gui.SelectedObject==play then Gui.SelectedObject=previousSelection and previousSelection.Parent and previousSelection or nil end
+  if disabledControls and controls then controls:Enable();disabledControls=false end
+  for camera,fov in pairs(cameraFov) do camera.FieldOfView=fov end
+  local camera=workspace.CurrentCamera
+  if camera then
+   camera.CameraType=Enum.CameraType.Custom
+   local character=ctx.Player.Character;local humanoid=character and character:FindFirstChildOfClass("Humanoid")
+   if humanoid then camera.CameraSubject=humanoid end
+  end
+  ctx.OnPlay()
+  Tween:Create(card,TweenInfo.new(.35,Enum.EasingStyle.Quad),{GroupTransparency=1,Position=UDim2.fromScale(.5,.53)}):Play()
+  Tween:Create(backdrop,TweenInfo.new(.4),{BackgroundTransparency=1}):Play()
+  task.delay(.42,cleanUp)
+ end
+ play.Activated:Connect(begin)
+ play.MouseEnter:Connect(function() Tween:Create(buttonScale,TweenInfo.new(.14),{Scale=1.025}):Play() end)
+ play.MouseLeave:Connect(function() Tween:Create(buttonScale,TweenInfo.new(.14),{Scale=1}):Play() end)
+ table.insert(connections,Input.InputBegan:Connect(function(input,processed)
+  if not processed and (input.KeyCode==Enum.KeyCode.Return or input.KeyCode==Enum.KeyCode.ButtonA) then begin() end
+ end))
+ Actions:BindActionAtPriority("RiftJoinTitle",function() return Enum.ContextActionResult.Sink end,false,3000,Enum.PlayerActions.CharacterForward,Enum.PlayerActions.CharacterBackward,Enum.PlayerActions.CharacterLeft,Enum.PlayerActions.CharacterRight,Enum.PlayerActions.CharacterJump)
+ task.spawn(function()
+  local scripts=ctx.Player:WaitForChild("PlayerScripts",10);if not scripts then return end
+  local module=scripts:WaitForChild("PlayerModule",10);if not module then return end
+  local ok,result=pcall(function() return require(module):GetControls() end)
+  if ok and result and phase=="Waiting" then controls=result;controls:Disable();disabledControls=true end
+ end)
+ local viewportConnection
+ local function connectCamera()
+  if viewportConnection then viewportConnection:Disconnect() end
+  local camera=workspace.CurrentCamera
+  if camera then viewportConnection=camera:GetPropertyChangedSignal("ViewportSize"):Connect(resize);table.insert(connections,viewportConnection) end
+  resize();if phase=="Waiting" then cameraView() end
+ end
+ table.insert(connections,workspace:GetPropertyChangedSignal("CurrentCamera"):Connect(connectCamera))
+ table.insert(connections,Run.RenderStepped:Connect(function()
+  if phase=="Waiting" then cameraView();controller:Refresh() end
+ end))
+ connectCamera();controller:Refresh()
+ Tween:Create(card,TweenInfo.new(.45,Enum.EasingStyle.Back),{Position=UDim2.fromScale(.5,.5)}):Play()
+ return controller
+end
+return T
+</ProtectedString></Properties></Item><Item class="ModuleScript" referent="RBX_RIFT_MODULE_Polish"><Properties><string name="Name">Polish</string><ProtectedString name="Source">-- Cosmetic client effects only. No currency, damage, or inventory changes here.
 local P={}
 local Run=game:GetService("RunService")
 local Tween=game:GetService("TweenService")
@@ -65225,6 +65421,29 @@ function L.Number(value)
  return tostring(math.floor(value))
 end
 return L
+</ProtectedString></Properties></Item><Item class="ModuleScript" referent="RBX_RIFT_MODULE_OutfitDetails"><Properties><string name="Name">OutfitDetails</string><ProtectedString name="Source">-- Small block-built accessories shared by live avatars and inventory previews.
+local D={}
+function D.Apply(character,outfit,parent,anchored)
+ local head=character:FindFirstChild("Head")
+ local torso=character:FindFirstChild("UpperTorso") or character:FindFirstChild("Torso") or character:FindFirstChild("Body")
+ if not head then return end
+ local unit=head.Size.X/2
+ local function piece(name,host,size,offset,color,wedge)
+  if not host then return end
+  local p=Instance.new(wedge and "WedgePart" or "Part");p.Name=name;p.Size=Vector3.new(size[1]*unit,size[2]*unit,size[3]*unit);p.CFrame=host.CFrame*CFrame.new(offset[1]*unit,offset[2]*unit,offset[3]*unit);p.Color=Color3.fromRGB(table.unpack(color));p.Material=Enum.Material.SmoothPlastic;p.Anchored=anchored==true;p.CanCollide=false;p.CanTouch=false;p.CanQuery=false;p.Massless=true;p.Parent=parent
+  if not anchored then local weld=Instance.new("WeldConstraint",p);weld.Part0=host;weld.Part1=p end
+ end
+ if outfit.Hat then
+  piece("Fighter cap",head,{2.15,.55,1.5},{0,.65,0},outfit.Hat)
+  piece("Cap brim",head,{2.2,.12,1.1},{0,.45,-.8},outfit.Hat)
+ end
+ if outfit.Headband then piece("Headband",head,{2.05,.28,.12},{0,.25,-.56},outfit.Headband) end
+ if outfit.Ears then for _,side in ipairs({-1,1}) do piece("Cat ear",head,{.5,1.5,.5},{side*.65,1,0},outfit.Ears,true) end end
+ if outfit.Cape then piece("Fighter cape",torso,{2.3,2.8,.18},{0,-.35,.7},outfit.Cape) end
+ if outfit.Collar then piece("Fighter collar",torso,{2.1,.35,1.1},{0,.85,0},outfit.Collar) end
+ if outfit.Tie then piece("Fighter tie",torso,{.25,1.3,.12},{0,.1,-.56},outfit.Tie) end
+end
+return D
 </ProtectedString></Properties></Item></Item>
 	</Item>
 	<Item class="ServerScriptService" referent="RBX980">
@@ -65853,6 +66072,7 @@ return A
 	<Item class="ModuleScript" referent="RBX_RIFT_SERVER_Avatars"><Properties><string name="Name">Avatars</string><ProtectedString name="Source">-- Fighter outfits and safe rig swaps; no combat behavior.
 local C=require(game.ReplicatedStorage.AnimeRift.Config)
 local Effects=require(game.ReplicatedStorage.AnimeRift.Effects)
+local Details=require(game.ReplicatedStorage.AnimeRift.OutfitDetails)
 local A={}
 local GetData
 local function model(p) return p.Character end
@@ -65904,15 +66124,17 @@ local function decorate(p)
  local colors=Instance.new("BodyColors",m)
  local skin=Color3.fromRGB(table.unpack(outfit.Skin)); local cloth=Color3.fromRGB(table.unpack(outfit.Cloth))
  colors.HeadColor3=skin; colors.LeftArmColor3=skin; colors.RightArmColor3=skin
- colors.TorsoColor3=cloth; colors.LeftLegColor3=cloth; colors.RightLegColor3=cloth
+ local legs=outfit.Legs and Color3.fromRGB(table.unpack(outfit.Legs)) or cloth
+ colors.TorsoColor3=cloth; colors.LeftLegColor3=legs; colors.RightLegColor3=legs
+ local hair=Instance.new("Folder",m);hair.Name="RiftOutfit"
  local head=m:FindFirstChild("Head")
- if head and not outfit.Bald then
-  local hair=Instance.new("Folder",m); hair.Name="RiftOutfit"
+ if head and not outfit.Bald and not outfit.Hat then
   for i=-2,2 do
    local spike=Instance.new("WedgePart"); spike.Name="Hair tuft"; spike.Size=Vector3.new(0.45,0.7+math.abs(i)*0.12,0.9); spike.Color=Color3.fromRGB(table.unpack(outfit.Hair)); spike.CanCollide=false; spike.CanTouch=false; spike.CanQuery=false; spike.Massless=true; spike.CFrame=head.CFrame*CFrame.new(i*0.32,0.6,0.1)*CFrame.Angles(0,0,-i*0.16); spike.Parent=hair
    local weld=Instance.new("WeldConstraint",spike); weld.Part0=head; weld.Part1=spike
   end
  end
+ Details.Apply(m,outfit,hair,false)
  end
  Effects.ApplyAnimations(m,h.Id)
  local highlight=m:FindFirstChild("RiftOutline") or Instance.new("Highlight"); highlight.Name="RiftOutline"; highlight.FillTransparency=1; highlight.OutlineColor=h.Color; highlight.OutlineTransparency=0.3; highlight.Parent=m

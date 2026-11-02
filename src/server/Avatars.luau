@@ -1,6 +1,7 @@
 -- Fighter outfits and safe rig swaps; no combat behavior.
 local C=require(game.ReplicatedStorage.AnimeRift.Config)
 local Effects=require(game.ReplicatedStorage.AnimeRift.Effects)
+local Details=require(game.ReplicatedStorage.AnimeRift.OutfitDetails)
 local A={}
 local GetData
 local function model(p) return p.Character end
@@ -52,15 +53,17 @@ local function decorate(p)
  local colors=Instance.new("BodyColors",m)
  local skin=Color3.fromRGB(table.unpack(outfit.Skin)); local cloth=Color3.fromRGB(table.unpack(outfit.Cloth))
  colors.HeadColor3=skin; colors.LeftArmColor3=skin; colors.RightArmColor3=skin
- colors.TorsoColor3=cloth; colors.LeftLegColor3=cloth; colors.RightLegColor3=cloth
+ local legs=outfit.Legs and Color3.fromRGB(table.unpack(outfit.Legs)) or cloth
+ colors.TorsoColor3=cloth; colors.LeftLegColor3=legs; colors.RightLegColor3=legs
+ local hair=Instance.new("Folder",m);hair.Name="RiftOutfit"
  local head=m:FindFirstChild("Head")
- if head and not outfit.Bald then
-  local hair=Instance.new("Folder",m); hair.Name="RiftOutfit"
+ if head and not outfit.Bald and not outfit.Hat then
   for i=-2,2 do
    local spike=Instance.new("WedgePart"); spike.Name="Hair tuft"; spike.Size=Vector3.new(0.45,0.7+math.abs(i)*0.12,0.9); spike.Color=Color3.fromRGB(table.unpack(outfit.Hair)); spike.CanCollide=false; spike.CanTouch=false; spike.CanQuery=false; spike.Massless=true; spike.CFrame=head.CFrame*CFrame.new(i*0.32,0.6,0.1)*CFrame.Angles(0,0,-i*0.16); spike.Parent=hair
    local weld=Instance.new("WeldConstraint",spike); weld.Part0=head; weld.Part1=spike
   end
  end
+ Details.Apply(m,outfit,hair,false)
  end
  Effects.ApplyAnimations(m,h.Id)
  local highlight=m:FindFirstChild("RiftOutline") or Instance.new("Highlight"); highlight.Name="RiftOutline"; highlight.FillTransparency=1; highlight.OutlineColor=h.Color; highlight.OutlineTransparency=0.3; highlight.Parent=m

@@ -10,9 +10,14 @@ local folder=RS:WaitForChild("AnimeRift")
 local C=require(folder:WaitForChild("Config"))
 local Polish=require(folder:WaitForChild("Polish"))
 local Layout=require(folder:WaitForChild("ClientLayout"))
+local TitleScreen=require(folder:WaitForChild("TitleScreen"))
+local OutfitDetails=require(folder:WaitForChild("OutfitDetails"))
 local Request=folder:WaitForChild("Request"); local Event=folder:WaitForChild("Event")
 local ui=Instance.new("ScreenGui"); ui.Name="AnimeRiftUI"; ui.ResetOnSpawn=false; ui.ZIndexBehavior=Enum.ZIndexBehavior.Sibling; ui.Parent=p:WaitForChild("PlayerGui")
 local canvas=Instance.new("Frame",ui); canvas.Size=UDim2.fromOffset(1200,760); canvas.AnchorPoint=Vector2.new(0.5,0.5); canvas.Position=UDim2.fromScale(0.5,0.5); canvas.BackgroundTransparency=1
+canvas.Visible=false
+local titleActive=true
+local titleScreen
 local scale=Instance.new("UIScale",canvas)
 local state,page,render
 local renderInventory
@@ -125,6 +130,7 @@ local function notify(text)
  task.delay(4,function() if toastSerial==serial then Tween:Create(toast,TweenInfo.new(0.2),{Position=UDim2.new(.5,0,0,-65)}):Play(); task.wait(0.2); if toastSerial==serial then toast.Visible=false end end end)
 end
 local function call(action,arg)
+ if titleActive and action~="State" then return end
  if revealing and action~="State" then notify("Finish your character reveal first."); return end
  if busy then if action~="State" and action~="Train" then notify("Finishing your previous action...") end; return end
  if folder:GetAttribute("ServerStatus")=="Error" then
@@ -210,6 +216,7 @@ local function action(text,color,fn)
  rowNumber=rowNumber+1; local b=button(list,text,contentWidth,52,color,fn); b.LayoutOrder=rowNumber; return b
 end
 open=function(name)
+ if titleActive then return end
  if revealing then return end
  menuSerial+=1;page=name; window.Visible=true;dim.Visible=true; sound("Open",0.85); render()
  window.Position=modalPosition+UDim2.fromOffset(0,18); Tween:Create(window,TweenInfo.new(0.25,Enum.EasingStyle.Back),{Position=modalPosition}):Play()
@@ -274,6 +281,7 @@ local goalText=label(canvas,"Click to collect power\nSell power for coins\nSummo
 local practice=button(canvas,"REBIRTH BONUSES",205,43,palette.Mint,function() open("Rebirth") end);practice.Position=UDim2.fromOffset(10,520)
 local lastTrain=-math.huge
 local function train()
+ if titleActive then return end
  if not state or page or window.Visible or revealing or Input:GetFocusedTextBox() then return end
  if os.clock()-lastTrain<C.Training.Interval then return end
  lastTrain=os.clock();call("Train")
@@ -335,11 +343,12 @@ local function portrait(parent,id,pos,size,spin)
  block("Body",Vector3.new(1.4,1.6,0.7),Vector3.new(0,0.2,0),outfit.Cloth)
  for _,side in ipairs({-1,1}) do
   block("Arm",Vector3.new(0.5,1.5,0.6),Vector3.new(side,0.2,0),outfit.Skin)
-  block("Leg",Vector3.new(0.6,1.2,0.65),Vector3.new(side*0.36,-1.2,0),outfit.Cloth)
+  block("Leg",Vector3.new(0.6,1.2,0.65),Vector3.new(side*0.36,-1.2,0),outfit.Legs or outfit.Cloth)
  end
- if not outfit.Bald then
+ if not outfit.Bald and not outfit.Hat then
   for i=-2,2 do local hair=block("Hair",Vector3.new(0.25,0.5,0.8),Vector3.new(i*0.2,2,0),outfit.Hair); hair.Rotation=Vector3.new(0,0,-i*12) end
  end
+ OutfitDetails.Apply(display,outfit,display,true)
  if spin then spinningPreviews[view]={Model=display,Base=display:GetPivot(),Started=os.clock()} end
  return view
 end
@@ -486,7 +495,7 @@ render=function()
    if purchaseButton.Parent then purchaseButton.Label.Text=ok and info.IsForSale and ("BUY • "..tostring(info.PriceInRobux).." ROBUX") or "Unavailable on Roblox" end
   end) end
   if not state.PaidAllowed then row("Paid rolls and luck are unavailable for this account. You can still sell power, rebirth, redeem codes, and spin without paid luck.",75) end
-  row("2x luck doubles the actual probability of Rare and higher tiers. Standard Secret: 0.01% → 0.02%. Boosted Secret: 0.1% → 0.2%. Secrets split equally between all rollable Secret fighters. Marlon: 0.001% standard; 0.01% boosted; luck doubles both.",90)
+  row("2x luck doubles the actual probability of Rare and higher tiers. Standard Secret: 0.01% → 0.02%. Boosted Secret: 0.1% → 0.2%. Each tier splits equally between its rollable fighters. See the live per-fighter odds below; luck doubles Rare and higher tier odds.",90)
   odds(false,false); odds(false,true)
   if selectedProduct=="Luck" then row("Luck also applies to cosmetic rolls:",40); odds(true,false); odds(true,true) end
  elseif page=="Admin" then
@@ -603,7 +612,7 @@ local function party(data)
  end)
 end
 apply=function(s)
- if not s then return end; state=s;Polish.Aura(p.Character,s.Aura); offset=s.ServerTime-os.time()
+ if not s then return end; state=s;if titleScreen then titleScreen:Refresh() end;Polish.Aura(p.Character,s.Aura); offset=s.ServerTime-os.time()
  if coinTween then coinTween:Cancel() end;if gemTween then gemTween:Cancel() end
  coinTween=Tween:Create(coinCounter,TweenInfo.new(.28,Enum.EasingStyle.Quad),{Value=s.Coins});coinTween:Play()
  gemTween=Tween:Create(gemCounter,TweenInfo.new(.28,Enum.EasingStyle.Quad),{Value=s.Gems});gemTween:Play();winsLabel.Text=(s.Rebirths or 0).." REBIRTHS"
@@ -619,7 +628,7 @@ Event.OnClientEvent:Connect(function(kind,data)
   if data.Gain>0 then floating("+"..data.Gain.." POWER",palette.Gold) end;Polish.Train(p.Character,state and state.Equipped);sound("Click",1.15)
  elseif kind=="OpenMenu" then open(data)
  elseif kind=="Toast" then notify(data)
- elseif kind=="Reveal" then playReveal(data)
+ elseif kind=="Reveal" then if titleActive then table.insert(revealQueue,data) else playReveal(data) end
  elseif kind=="AdminEvent" then party(data)
  elseif kind=="ClickerReward" then
   Polish.Pulse(.15)
@@ -641,6 +650,7 @@ Event.OnClientEvent:Connect(function(kind,data)
  end
 end)
 Input.InputBegan:Connect(function(input,processed)
+ if titleActive then return end
  if not processed and input.KeyCode==Enum.KeyCode.F8 then open("Admin");return end
  if input.KeyCode==Enum.KeyCode.Escape and page then closeMenu();return end
  if processed or page or revealing or Input:GetFocusedTextBox() then return end
@@ -656,7 +666,7 @@ Prompts.PromptShown:Connect(function(prompt)
  end
 end)
 Prompts.PromptHidden:Connect(function(prompt) shownPrompts[prompt]=nil end)
-folder:GetAttributeChangedSignal("ServerStatus"):Connect(function() if page and not state then render() end end)
+folder:GetAttributeChangedSignal("ServerStatus"):Connect(function() if titleScreen then titleScreen:Refresh() end;if page and not state then render() end end)
 local lastTick=0
 Run.RenderStepped:Connect(function()
  local now=os.clock()
@@ -687,11 +697,11 @@ Run.RenderStepped:Connect(function()
 end)
 task.spawn(function()
  while not state do local result=call("State"); if result and result.State then apply(result.State) end; if not state then if page then render() end; task.wait(2) end end
- notify("Welcome to Anime Rift! Your first random fighter is ready.")
- sound("Open",1.2)
+ -- The title screen owns the welcome message after the player selects Play.
 end)
 
 local function bindCamera(character)
+ if titleActive then return end
  local humanoid=character:WaitForChild("Humanoid",10)
  if humanoid and p.Character==character and workspace.CurrentCamera then
   workspace.CurrentCamera.CameraType=Enum.CameraType.Custom
@@ -756,3 +766,16 @@ relayout=function()
  adminButton.Position=portrait and UDim2.fromOffset(540,16) or UDim2.fromOffset(1004,610)
 end
 resize()
+
+titleScreen=TitleScreen.Mount({
+ Player=p,Parent=p:WaitForChild("PlayerGui"),FighterCount=#C.Characters,
+ IsReady=function() return state~=nil and folder:GetAttribute("ServerStatus")=="Ready" end,
+ ServerStatus=function() return folder:GetAttribute("ServerStatus") end,
+ OnRetry=function() task.spawn(function() local r=call("State");if r and r.State then apply(r.State) end end) end,
+ OnPlay=function()
+  titleActive=false;canvas.Visible=true
+  if p.Character then task.spawn(bindCamera,p.Character) end
+  sound("Open",1.2);notify("Welcome to Rift Meadows! Click for power, then sell and summon.")
+  if #revealQueue>0 then task.delay(.5,function() if not revealing and #revealQueue>0 then playReveal(table.remove(revealQueue,1)) end end) end
+ end,
+})
