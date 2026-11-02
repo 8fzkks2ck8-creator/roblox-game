@@ -12,7 +12,8 @@ CFrame={new=function(x,y,z)
  return setmetatable({_type="CFrame",X=x or 0,Y=y or 0,Z=z or 0,R={1,0,0,0,1,0,0,0,1}},F)
 end}
 function CFrame.Angles(x,y,z)
- local f=CFrame.new();local c,s=math.cos(z),math.sin(z);f.R={c,-s,0,s,c,0,0,0,1};return f
+ local f=CFrame.new();local cx,sx=math.cos(x),math.sin(x);local cy,sy=math.cos(y),math.sin(y);local cz,sz=math.cos(z),math.sin(z)
+ f.R={cy*cz,-cy*sz,sy,cx*sz+sx*sy*cz,cx*cz-sx*sy*sz,-sx*cy,sx*sz-cx*sy*cz,sx*cz+cx*sy*sz,cx*cy};return f
 end
 function F.__mul(a,b)
  local f=CFrame.new(a.X+a.R[1]*b.X+a.R[2]*b.Y+a.R[3]*b.Z,a.Y+a.R[4]*b.X+a.R[5]*b.Y+a.R[6]*b.Z,a.Z+a.R[7]*b.X+a.R[8]*b.Y+a.R[9]*b.Z)

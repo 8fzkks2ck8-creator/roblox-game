@@ -14,7 +14,7 @@ def prop(parent,tag,key,value):
     el=ET.SubElement(parent,tag,name=key)
     if value is not None: el.text=str(value)
     return el
-ENUMS={'Material':{'SmoothPlastic':272,'Slate':800,'Grass':1280,'Neon':288,'Glass':1568},'SurfaceType':{'Smooth':0},'PartType':{'Ball':0,'Cylinder':2},'Font':{'GothamBold':19}}
+ENUMS={'Material':{'Plastic':256,'SmoothPlastic':272,'Slate':800,'Grass':1280,'Neon':288,'Glass':1568},'SurfaceType':{'Smooth':0,'Studs':3},'PartType':{'Ball':0,'Cylinder':2},'Font':{'GothamBold':19,'FredokaOne':26}}
 
 def write_props(properties, data, cls):
     for key,value in data.items():

@@ -9,14 +9,28 @@ local p=Players.LocalPlayer
 local folder=RS:WaitForChild("AnimeRift")
 local C=require(folder:WaitForChild("Config"))
 local Polish=require(folder:WaitForChild("Polish"))
+local Layout=require(folder:WaitForChild("ClientLayout"))
 local Request=folder:WaitForChild("Request"); local Event=folder:WaitForChild("Event")
 local ui=Instance.new("ScreenGui"); ui.Name="AnimeRiftUI"; ui.ResetOnSpawn=false; ui.ZIndexBehavior=Enum.ZIndexBehavior.Sibling; ui.Parent=p:WaitForChild("PlayerGui")
 local canvas=Instance.new("Frame",ui); canvas.Size=UDim2.fromOffset(1200,760); canvas.AnchorPoint=Vector2.new(0.5,0.5); canvas.Position=UDim2.fromScale(0.5,0.5); canvas.BackgroundTransparency=1
 local scale=Instance.new("UIScale",canvas)
-local function resize() if not workspace.CurrentCamera then return end; local v=workspace.CurrentCamera.ViewportSize; scale.Scale=math.max(0.1,math.min(v.X/1200,(v.Y-50)/760)) end
-resize(); workspace.CurrentCamera:GetPropertyChangedSignal("ViewportSize"):Connect(resize)
-local palette={Ink=Color3.fromRGB(12,14,32),Panel=Color3.fromRGB(25,31,59),Cyan=Color3.fromRGB(30,192,255),Pink=Color3.fromRGB(255,72,127),Gold=Color3.fromRGB(255,205,39),White=Color3.fromRGB(255,255,255),Mint=Color3.fromRGB(99,239,184)}
+local relayout
+local metrics=Layout.Measure(1200,810)
+local modalPosition=UDim2.fromOffset(230,110)
+local function resize()
+ local camera=workspace.CurrentCamera;if not camera then return end
+ metrics=Layout.Measure(camera.ViewportSize.X,camera.ViewportSize.Y)
+ canvas.Size=UDim2.fromOffset(metrics.Width,metrics.Height);scale.Scale=metrics.Scale
+ modalPosition=UDim2.fromOffset(metrics.WindowX,metrics.WindowY)
+ if relayout then relayout() end
+end
+local viewportConnection
+resize();if workspace.CurrentCamera then viewportConnection=workspace.CurrentCamera:GetPropertyChangedSignal("ViewportSize"):Connect(resize) end
+local palette={Ink=Color3.fromRGB(23,28,49),Panel=Color3.fromRGB(61,117,193),Cyan=Color3.fromRGB(42,211,255),Pink=Color3.fromRGB(255,64,148),Gold=Color3.fromRGB(255,203,47),White=Color3.fromRGB(255,255,255),Mint=Color3.fromRGB(123,241,43)}
 local state,page,render,activeMatch=nil,nil,nil,nil
+local open
+local closeMenu
+local menuSerial=0
 local loadingStarted=os.clock()
 local apply
 local revealing=false
@@ -28,6 +42,7 @@ local movingPatterns={}
 local spinningPreviews={}
 local codeDraft=""
 local adminDraft=""
+local guardUntil=0
 local busy=false; local selectedProduct="Starter"; local cooldowns={}; local offset=0; local toastSerial=0
 local function sound(key,pitch)
  local id=C.Sounds[key]; if not id or id=="" then return end
@@ -50,10 +65,10 @@ local function characterSummonSound(id)
  audio:Play();game:GetService("Debris"):AddItem(audio,30)
  return true
 end
-local function corner(obj,r) local c=obj:FindFirstChildOfClass("UICorner") or Instance.new("UICorner",obj); c.CornerRadius=UDim.new(0,r or 18) end
+local function corner(obj,r) local c=obj:FindFirstChildOfClass("UICorner") or Instance.new("UICorner",obj); c.CornerRadius=UDim.new(0,r or 12) end
 local function outline(obj,color,thickness) local s=Instance.new("UIStroke",obj); s.Color=color or palette.Ink; s.Thickness=thickness or 3; s.ApplyStrokeMode=Enum.ApplyStrokeMode.Border end
 local function label(parent,text,size,pos,textsize,color)
- local t=Instance.new("TextLabel",parent); t.Size=size; t.Position=pos or UDim2.new(); t.BackgroundTransparency=1; t.Text=text; t.Font=Enum.Font.GothamBold; t.TextSize=textsize or 18; t.TextColor3=color or palette.White; t.TextWrapped=true; t.ZIndex=3; t.TextStrokeColor3=Color3.new(0,0,0); t.TextStrokeTransparency=.65; local stroke=Instance.new("UIStroke",t); stroke.Color=Color3.new(0,0,0); stroke.Thickness=.65; return t
+ local t=Instance.new("TextLabel",parent); t.Size=size; t.Position=pos or UDim2.new(); t.BackgroundTransparency=1; t.Text=text; t.Font=Enum.Font.FredokaOne; t.TextSize=textsize or 18; t.TextColor3=color or palette.White; t.TextWrapped=true; t.ZIndex=3; t.TextStrokeColor3=Color3.new(0,0,0); t.TextStrokeTransparency=.05; local stroke=Instance.new("UIStroke",t); stroke.Color=Color3.new(0,0,0); stroke.Thickness=1.2; return t
 end
 local function textGradient(obj,top,bottomColor)
  obj.TextColor3=Color3.new(1,1,1)
@@ -65,10 +80,13 @@ local function gradient(obj,color)
  obj.BackgroundColor3=Color3.new(1,1,1)
 end
 local function studs(parent,width,height,step)
- local mask=Instance.new("Frame",parent);mask.Name="SlidingStuds";mask.Size=UDim2.fromScale(1,1);mask.BackgroundTransparency=1;mask.ClipsDescendants=true;mask.Active=false;mask.ZIndex=1;corner(mask,math.min(24,height/2))
- for i=1,3 do
-  local dot=Instance.new("Frame",mask);dot.Size=UDim2.fromOffset(36+i*10,36+i*10);dot.Position=UDim2.fromOffset(width-i*42,-20+i*5);dot.BackgroundColor3=Color3.new(1,1,1);dot.BackgroundTransparency=.94;dot.BorderSizePixel=0;corner(dot,80)
- end
+ local mask=Instance.new("Frame",parent);mask.Name="CheckerMask";mask.Size=UDim2.fromScale(1,1);mask.BackgroundTransparency=1;mask.ClipsDescendants=true;mask.Active=false;mask.ZIndex=1;corner(mask,12)
+ local tile=math.max(18,math.ceil(math.sqrt(width*height/80)))
+ for y=0,math.ceil(height/tile)-1 do for x=0,math.ceil(width/tile)-1 do
+  if (x+y)%2==0 then
+   local square=Instance.new("Frame",mask);square.Size=UDim2.fromOffset(tile,tile);square.Position=UDim2.fromOffset(x*tile,y*tile);square.BackgroundColor3=Color3.new(1,1,1);square.BackgroundTransparency=.9;square.BorderSizePixel=0;square.Active=false
+  end
+ end end
 end
 local function gleam(parent,w,h)
  for _,pos in ipairs({Vector2.new(3,h-3),Vector2.new(w-3,3)}) do
@@ -77,29 +95,30 @@ local function gleam(parent,w,h)
  end
 end
 local function panel(parent,size,pos,color,pattern)
- local f=Instance.new("Frame",parent); f.Size=UDim2.fromOffset(size.X,size.Y); f.Position=UDim2.fromOffset(pos.X,pos.Y); f.BackgroundColor3=color or palette.Panel; f.BorderSizePixel=0; corner(f,22); outline(f,palette.Ink,2)
+ local f=Instance.new("Frame",parent); f.Size=UDim2.fromOffset(size.X,size.Y); f.Position=UDim2.fromOffset(pos.X,pos.Y); f.BackgroundColor3=color or palette.Panel; f.BorderSizePixel=0; corner(f,12); outline(f,palette.Ink,3)
  if pattern then gradient(f,color or palette.Panel); studs(f,size.X,size.Y,20) end
  return f
 end
 local function button(parent,text,width,height,color,fn)
- local b=Instance.new("TextButton",parent); b.Size=UDim2.fromOffset(width,height); b.BackgroundColor3=color or palette.Cyan; b.Text=""; b.AutoButtonColor=false; b.BorderSizePixel=0; corner(b,math.min(24,height/2)); outline(b,palette.Ink,2)
+ local b=Instance.new("TextButton",parent); b.Size=UDim2.fromOffset(width,height); b.BackgroundColor3=color or palette.Cyan; b.Text=""; b.AutoButtonColor=false; b.BorderSizePixel=0; corner(b,math.min(16,height/2)); outline(b,palette.Ink,3)
  gradient(b,color or palette.Cyan)
+ local inset=Instance.new("Frame",b);inset.Name="Inset";inset.Position=UDim2.fromOffset(3,3);inset.Size=UDim2.new(1,-6,1,-6);inset.BackgroundTransparency=1;inset.Active=false;corner(inset,math.min(12,height/2));local rim=Instance.new("UIStroke",inset);rim.Color=palette.White;rim.Transparency=.25;rim.Thickness=1.5
  if string.find(text,"GEMS") or string.find(text,"GEM PARTY") then b:FindFirstChildOfClass("UIGradient").Color=ColorSequence.new(Color3.fromRGB(174,86,255),Color3.fromRGB(255,53,202))
  elseif string.find(text,"COINS") or string.find(text,"BUY") then b:FindFirstChildOfClass("UIGradient").Color=ColorSequence.new(Color3.fromRGB(183,255,105),Color3.fromRGB(44,220,59)) end
  studs(b,width,height,20)
  local t=label(b,text,UDim2.new(1,-14,1,-6),UDim2.fromOffset(7,0),20,palette.White); t.Name="Label"
  local s=Instance.new("UIScale",b)
- b.MouseEnter:Connect(function() Tween:Create(s,TweenInfo.new(0.12),{Scale=1.025}):Play() end)
+ b.MouseEnter:Connect(function() Tween:Create(s,TweenInfo.new(0.16,Enum.EasingStyle.Back),{Scale=1.035}):Play() end)
  b.MouseLeave:Connect(function() Tween:Create(s,TweenInfo.new(0.12),{Scale=1}):Play() end)
  b.Activated:Connect(function() sound("Click",1.7); Tween:Create(s,TweenInfo.new(0.08,Enum.EasingStyle.Back),{Scale=0.96}):Play(); task.delay(0.1,function() if s.Parent then Tween:Create(s,TweenInfo.new(0.16),{Scale=1}):Play() end end); fn() end)
  return b
 end
-local toast=panel(canvas,Vector2.new(900,40),Vector2.new(150,-65),palette.Panel,false); toast.BackgroundTransparency=0.3; toast.ZIndex=100; toast.Visible=false
+local toast=panel(canvas,Vector2.new(900,40),Vector2.new(150,-65),palette.Panel,false); toast.AnchorPoint=Vector2.new(.5,0);toast.BackgroundTransparency=.08; toast.ZIndex=100; toast.Visible=false
 local toastText=label(toast,"",UDim2.new(1,-20,1,0),UDim2.fromOffset(10,0),22,palette.Mint)
 local function notify(text)
- toastSerial=toastSerial+1; local serial=toastSerial; toastText.Text=text; toast.Visible=true; toast.Position=UDim2.fromOffset(150,-65)
- Tween:Create(toast,TweenInfo.new(0.35,Enum.EasingStyle.Back),{Position=UDim2.fromOffset(150,78)}):Play()
- task.delay(4,function() if toastSerial==serial then Tween:Create(toast,TweenInfo.new(0.2),{Position=UDim2.fromOffset(150,-65)}):Play(); task.wait(0.2); if toastSerial==serial then toast.Visible=false end end end)
+ toastSerial=toastSerial+1; local serial=toastSerial; toastText.Text=text; toast.Visible=true; toast.Position=UDim2.new(.5,0,0,-65)
+ Tween:Create(toast,TweenInfo.new(0.35,Enum.EasingStyle.Back),{Position=UDim2.new(.5,0,0,metrics.Portrait and 215 or 78)}):Play()
+ task.delay(4,function() if toastSerial==serial then Tween:Create(toast,TweenInfo.new(0.2),{Position=UDim2.new(.5,0,0,-65)}):Play(); task.wait(0.2); if toastSerial==serial then toast.Visible=false end end end)
 end
 local function call(action,arg)
  if revealing and action~="State" and action~="Attack" and action~="LeaveBoss" then notify("Finish your character reveal first."); return end
@@ -122,39 +141,56 @@ local function call(action,arg)
  if response and response.Message and action~="State" then notify(response.Message) end
  return response
 end
-local header=Instance.new("Frame",canvas); header.Size=UDim2.fromOffset(230,94); header.Position=UDim2.fromOffset(12,648); header.BackgroundTransparency=1
-local currencies=label(header,"CONNECTING...",UDim2.fromOffset(245,37),UDim2.fromOffset(0,0),28,palette.Mint); currencies.TextXAlignment=Enum.TextXAlignment.Left
+local header=panel(canvas,Vector2.new(246,100),Vector2.new(12,648),palette.Panel,true);header.BackgroundTransparency=.08
+local currencies=label(header,"CONNECTING...",UDim2.fromOffset(230,37),UDim2.fromOffset(8,0),26,palette.Mint); currencies.TextXAlignment=Enum.TextXAlignment.Left
 textGradient(currencies,Color3.fromRGB(202,255,130),Color3.fromRGB(35,221,50))
-local gemsLabel=label(header,"GEMS",UDim2.fromOffset(245,32),UDim2.fromOffset(0,38),24);gemsLabel.TextXAlignment=Enum.TextXAlignment.Left
+local gemsLabel=label(header,"GEMS",UDim2.fromOffset(230,32),UDim2.fromOffset(8,38),24);gemsLabel.TextXAlignment=Enum.TextXAlignment.Left
 textGradient(gemsLabel,Color3.fromRGB(210,115,255),Color3.fromRGB(255,42,215))
-local winsLabel=label(header,"",UDim2.fromOffset(245,22),UDim2.fromOffset(0,72),16);winsLabel.TextXAlignment=Enum.TextXAlignment.Left
+local winsLabel=label(header,"",UDim2.fromOffset(230,22),UDim2.fromOffset(8,72),16);winsLabel.TextXAlignment=Enum.TextXAlignment.Left
+local coinCounter=Instance.new("NumberValue",header)
+local gemCounter=Instance.new("NumberValue",header)
+coinCounter.Changed:Connect(function(v) currencies.Text=Layout.Number(v).." COINS" end)
+gemCounter.Changed:Connect(function(v) gemsLabel.Text=Layout.Number(v).." GEMS" end)
+gemsLabel.Text="0 GEMS"
+local coinTween,gemTween
 local logo=label(canvas,"ANIME RIFT",UDim2.fromOffset(245,55),UDim2.fromOffset(10,10),32,palette.Gold)
 local bottom=label(canvas,"CLICK • TRAIN • CONQUER",UDim2.fromOffset(650,30),UDim2.fromOffset(275,630),16)
 local status=label(canvas,"",UDim2.fromOffset(720,36),UDim2.fromOffset(240,108),21,palette.Gold)
 local dim=Instance.new("TextButton",canvas);dim.Name="ModalBackdrop";dim.Size=UDim2.fromScale(1,1);dim.BackgroundColor3=Color3.fromRGB(9,24,46);dim.BackgroundTransparency=.4;dim.Text="";dim.AutoButtonColor=false;dim.ZIndex=8;dim.Visible=false
-local window=panel(canvas,Vector2.new(740,480),Vector2.new(230,145),palette.Panel,false); window.ZIndex=10; window.Visible=false; window.BackgroundTransparency=0.04
-local inner=Instance.new("UIStroke",window); inner.Color=Color3.fromRGB(169,239,255); inner.Thickness=1.5
+local window=panel(canvas,Vector2.new(740,540),Vector2.new(230,110),palette.Panel,false); window.ZIndex=10; window.Visible=false; window.BackgroundTransparency=0.04
+local innerFrame=Instance.new("Frame",window);innerFrame.Size=UDim2.new(1,-10,1,-10);innerFrame.Position=UDim2.fromOffset(5,5);innerFrame.BackgroundTransparency=1;innerFrame.Active=false;corner(innerFrame,9);outline(innerFrame,palette.White,2)
 local banner=panel(window,Vector2.new(736,62),Vector2.new(2,2),palette.Cyan,true); gleam(banner,736,62)
-local title=label(banner,"",UDim2.fromOffset(625,58),UDim2.fromOffset(16,0),34,palette.White); title.TextXAlignment=Enum.TextXAlignment.Left
-local close=button(banner,"X",58,56,Color3.fromRGB(255,66,45),function() page=nil; window.Visible=false;dim.Visible=false end); close.Position=UDim2.fromOffset(674,3); close.Label.TextSize=38
-dim.Activated:Connect(function() page=nil;window.Visible=false;dim.Visible=false end)
+local title=label(banner,"",UDim2.fromOffset(365,58),UDim2.fromOffset(16,0),34,palette.White); title.TextXAlignment=Enum.TextXAlignment.Left
+local close=button(banner,"X",58,56,Color3.fromRGB(255,66,45),function() closeMenu() end); close.Position=UDim2.fromOffset(674,3); close.Label.TextSize=38
+closeMenu=function()
+ menuSerial+=1;local serial=menuSerial;page=nil
+ Tween:Create(window,TweenInfo.new(.13,Enum.EasingStyle.Quad),{Position=modalPosition+UDim2.fromOffset(0,18)}):Play()
+ task.delay(.13,function() if serial==menuSerial then window.Visible=false;dim.Visible=false end end)
+end
+dim.Activated:Connect(function() closeMenu() end)
 local list=Instance.new("ScrollingFrame",window); list.Position=UDim2.fromOffset(16,77); list.Size=UDim2.fromOffset(708,388); list.BackgroundTransparency=1; list.BorderSizePixel=0; list.ScrollBarThickness=6; list.ScrollBarImageColor3=palette.Cyan; list.AutomaticCanvasSize=Enum.AutomaticSize.Y; list.CanvasSize=UDim2.new(); list.ClipsDescendants=true
 local layout=Instance.new("UIListLayout",list); layout.Padding=UDim.new(0,12); layout.SortOrder=Enum.SortOrder.LayoutOrder
 local pad=Instance.new("UIPadding",list); pad.PaddingLeft=UDim.new(0,6); pad.PaddingRight=UDim.new(0,12); pad.PaddingTop=UDim.new(0,4); pad.PaddingBottom=UDim.new(0,12)
+local menuMoney=label(banner,"",UDim2.fromOffset(230,50),UDim2.fromOffset(420,5),21,palette.Gold);menuMoney.TextXAlignment=Enum.TextXAlignment.Right
+local tabs={}
+for i,data in ipairs({{"Fighters","Inventory"},{"Auras","Cosmetics"},{"Store","Shop"}}) do
+ local tab=button(window,data[1],228,42,i==3 and palette.Mint or Color3.fromRGB(146,158,176),function() open(data[2]) end)
+ tab.Position=UDim2.fromOffset(16+(i-1)*238,480);tabs[data[2]]=tab
+end
 local rowNumber=0
 local function row(text,height,color)
- rowNumber=rowNumber+1; local f=panel(list,Vector2.new(680,height or 60),Vector2.zero,color or Color3.fromRGB(22,83,105),false); f.LayoutOrder=rowNumber
+ rowNumber=rowNumber+1; local f=panel(list,Vector2.new(680,height or 60),Vector2.zero,color or Color3.fromRGB(75,119,197),false); f.LayoutOrder=rowNumber
  local l=label(f,text,UDim2.new(1,-24,1,-8),UDim2.fromOffset(12,4),17); l.TextXAlignment=Enum.TextXAlignment.Left
  return f,l
 end
 local function action(text,color,fn)
  rowNumber=rowNumber+1; local b=button(list,text,680,52,color,fn); b.LayoutOrder=rowNumber; return b
 end
-local function open(name)
+open=function(name)
  if revealing then return end
  if activeMatch then notify("Finish your boss fight first."); return end
- page=name; window.Visible=true;dim.Visible=true; sound("Open",0.85); render()
- window.Position=UDim2.fromOffset(230,162); Tween:Create(window,TweenInfo.new(0.22,Enum.EasingStyle.Back),{Position=UDim2.fromOffset(230,145)}):Play()
+ menuSerial+=1;page=name; window.Visible=true;dim.Visible=true; sound("Open",0.85); render()
+ window.Position=modalPosition+UDim2.fromOffset(0,18); Tween:Create(window,TweenInfo.new(0.25,Enum.EasingStyle.Back),{Position=modalPosition}):Play()
 end
 -- Original geometric icons; no external assets need to load.
 local function icon(parent,kind,color)
@@ -205,17 +241,18 @@ for i,v in ipairs(nav) do
  b.Label.Position=UDim2.fromOffset(0,56); b.Label.Size=UDim2.fromOffset(94,26); b.Label.TextSize=18
  icon(b,v[2],v[3])
 end
-local topShop=button(canvas,"SHOP",190,54,palette.Gold,function() open("Shop") end); topShop.Position=UDim2.fromOffset(400,7); topShop.Label.TextSize=30; gleam(topShop,190,54)
-local duel=button(canvas,"BOSSES",190,54,palette.Mint,function() open("Bosses") end);duel.Position=UDim2.fromOffset(610,7);duel.Label.TextSize=29;gleam(duel,190,54)
+local topShop=button(canvas,"STORE",220,54,palette.Gold,function() open("Shop") end); topShop.Position=UDim2.fromOffset(275,7); topShop.Label.TextSize=30; gleam(topShop,190,54)
+local duel=button(canvas,"BOSSES",220,54,palette.Mint,function() open("Bosses") end);duel.Position=UDim2.fromOffset(745,7);duel.Label.TextSize=29;gleam(duel,190,54)
+local topFighters=button(canvas,"FIGHTERS",220,54,palette.Cyan,function() open("Inventory") end);topFighters.Position=UDim2.fromOffset(510,7);topFighters.Label.TextSize=28
 local shop=button(canvas,"STARTER PACK",205,110,palette.Gold,function() selectedProduct="Starter"; open("Shop") end); shop.Position=UDim2.fromOffset(10,240); shop.Label.Position=UDim2.fromOffset(6,3); shop.Label.Size=UDim2.fromOffset(193,30); shop.Label.TextXAlignment=Enum.TextXAlignment.Left
 label(shop,"Sasuke + 5 spins\n+ 1 boosted ticket",UDim2.fromOffset(190,43),UDim2.fromOffset(7,34),16)
 local packOpen=button(shop,"VIEW PACK",110,25,palette.Mint,function() selectedProduct="Starter"; open("Shop") end); packOpen.Position=UDim2.fromOffset(85,80); packOpen.Label.TextSize=16; gleam(shop,205,110)
 local quests=label(canvas,"BOSS GOALS",UDim2.fromOffset(205,32),UDim2.fromOffset(10,366),24,palette.Gold)
-label(canvas,"Click to train strength\nEquip stronger fighters\nDefeat bosses for coins",UDim2.fromOffset(205,100),UDim2.fromOffset(10,403),18)
+local goalText=label(canvas,"Click to train strength\nEquip stronger fighters\nDefeat bosses for coins",UDim2.fromOffset(205,100),UDim2.fromOffset(10,403),18)
 local practice=button(canvas,"BOSS CHALLENGES",205,43,palette.Mint,function() open("Bosses") end);practice.Position=UDim2.fromOffset(10,520)
 local lastTrain=-math.huge
 local function train()
- if not state or page or revealing or Input:GetFocusedTextBox() then return end
+ if not state or page or window.Visible or revealing or Input:GetFocusedTextBox() then return end
  if os.clock()-lastTrain<C.Training.Interval then return end
  lastTrain=os.clock();call("Train")
 end
@@ -225,15 +262,25 @@ local bossLabel=label(canvas,"",UDim2.fromOffset(700,35),UDim2.fromOffset(250,15
 local bossTrack=panel(canvas,Vector2.new(500,16),Vector2.new(350,189),palette.Ink,false);bossTrack.Visible=false
 local bossFill=Instance.new("Frame",bossTrack);bossFill.Size=UDim2.fromScale(1,1);bossFill.BorderSizePixel=0;bossFill.BackgroundColor3=palette.Pink;corner(bossFill,8);gradient(bossFill,palette.Pink)
 local leaveBoss=button(canvas,"LEAVE BOSS",185,38,palette.Pink,function() call("LeaveBoss") end);leaveBoss.Position=UDim2.fromOffset(10,570);leaveBoss.Visible=false
+local progressTrack=panel(canvas,Vector2.new(500,16),Vector2.new(350,608),palette.Ink,false)
+local progressFill=Instance.new("Frame",progressTrack);progressFill.Size=UDim2.fromScale(0,1);progressFill.BackgroundColor3=palette.Mint;progressFill.BorderSizePixel=0;corner(progressFill,8);gradient(progressFill,palette.Mint)
+local progressText=label(progressTrack,"",UDim2.fromOffset(500,24),UDim2.fromOffset(0,18),15)
 local function trainingHud()
  if not state then return end
- strengthLabel.Text="STRENGTH "..math.floor(state.Strength or 0).."  •  "..(state.BossDamage or 10).." DMG"
+ strengthLabel.Text=Layout.Number(state.Strength).." STRENGTH  •  "..Layout.Number(state.BossDamage or 10).." DMG"
+ local nextBoss
+ for _,boss in ipairs(C.Bosses) do if (state.Strength or 0)<boss.Required then nextBoss=boss;break end end
+ local ratio=nextBoss and math.clamp((state.Strength or 0)/nextBoss.Required,0,1) or 1
+ Tween:Create(progressFill,TweenInfo.new(.15),{Size=UDim2.fromScale(ratio,1)}):Play()
+ progressText.Text=nextBoss and (Layout.Number(state.Strength).." / "..Layout.Number(nextBoss.Required).." • "..nextBoss.Name) or "ALL BOSS CHALLENGES UNLOCKED"
  trainButton.Label.Text=(activeMatch and "TRAIN + STRIKE" or "CLICK TO TRAIN").."  +"..(state.ClickGain or 1)
 end
 local function floating(text,color)
- local l=label(canvas,text,UDim2.fromOffset(230,40),UDim2.fromOffset(math.random(440,570),450),27,color);l.ZIndex=30
- Tween:Create(l,TweenInfo.new(.65),{Position=UDim2.fromOffset(math.random(400,600),350),TextTransparency=1,TextStrokeTransparency=1}):Play()
- game:GetService("Debris"):AddItem(l,.7)
+ local x=metrics.Width/2+math.random(-45,45);local y=metrics.Portrait and 900 or 450
+ local l=label(canvas,text,UDim2.fromOffset(270,40),UDim2.fromOffset(x,y),27,color);l.AnchorPoint=Vector2.new(.5,0);l.ZIndex=30
+ Tween:Create(l,TweenInfo.new(.7,Enum.EasingStyle.Quad),{Position=UDim2.fromOffset(x+math.random(-30,30),y-95),TextTransparency=1,TextStrokeTransparency=1}):Play()
+ local stroke=l:FindFirstChildOfClass("UIStroke");if stroke then Tween:Create(stroke,TweenInfo.new(.7),{Transparency=1}):Play() end
+ game:GetService("Debris"):AddItem(l,.75)
 end
 
 local luck=button(canvas,"2x LUCK",185,110,Color3.fromRGB(184,64,255),function() selectedProduct="Luck"; open("Shop") end); luck.Position=UDim2.fromOffset(1004,250); luck.Label.Position=UDim2.fromOffset(5,8); luck.Label.Size=UDim2.fromOffset(175,37); luck.Label.TextSize=29
@@ -292,7 +339,7 @@ end
 local wheelDisk
 local adminButton=button(canvas,"ADMIN EVENTS",185,37,palette.Pink,function() open("Admin") end);adminButton.Position=UDim2.fromOffset(1004,610);adminButton.Visible=false
 local function packArt(parent,kind)
- local art=Instance.new("Frame",parent);art.Size=UDim2.fromOffset(115,115);art.Position=UDim2.fromOffset(16,50);art.BackgroundTransparency=1
+ local art=Instance.new("Frame",parent);art.Size=UDim2.fromOffset(115,115);art.Position=UDim2.fromOffset(10,40);art.BackgroundTransparency=1
  if kind=="Luck" then
   for _,xy in ipairs({{25,18},{58,18},{25,51},{58,51}}) do local leaf=panel(art,Vector2.new(39,39),Vector2.new(xy[1],xy[2]),palette.Mint,false);corner(leaf,23);gradient(leaf,palette.Mint) end
   local stem=panel(art,Vector2.new(11,33),Vector2.new(53,76),palette.Mint,false);stem.Rotation=-18
@@ -307,9 +354,11 @@ render=function()
  for _,v in ipairs(list:GetChildren()) do if v:IsA("GuiObject") then v:Destroy() end end
  list.CanvasPosition=Vector2.zero; rowNumber=0
  if not page then return end
- title.Text=page=="Shop" and "RIFT SHOP" or string.upper(page)
+ menuMoney.Text=state and (Layout.Number(state.Coins).." COINS") or ""
+ for name,tab in pairs(tabs) do local g=tab:FindFirstChildOfClass("UIGradient");if g then local color=name==page and palette.Mint or Color3.fromRGB(140,155,174);g.Color=ColorSequence.new(color,color:Lerp(Color3.new(0,0,0),.2)) end end
+ title.Text=page=="Shop" and "Store" or page=="Inventory" and "Fighters" or page=="Cosmetics" and "Auras" or page
  local bannerGradient=banner:FindFirstChildOfClass("UIGradient")
- if bannerGradient then bannerGradient.Color=ColorSequence.new(page=="Shop" and Color3.fromRGB(255,119,191) or palette.Gold,page=="Shop" and Color3.fromRGB(223,25,81) or Color3.fromRGB(255,148,24)) end
+ if bannerGradient then bannerGradient.Color=ColorSequence.new(Color3.fromRGB(103,238,255),Color3.fromRGB(0,163,234)) end
  if not state then
   if folder:GetAttribute("ServerStatus")=="Error" then
    row("SERVER STARTUP ERROR\nOpen Studio Output to see the red error. Your data has not been replaced.",90)
@@ -341,17 +390,17 @@ render=function()
   end
  elseif page=="Inventory" then
   row("YOUR FIGHTERS • duplicates shown as × count\nClick an owned fighter to equip. Marlon is Super Secret. Sasuke comes from the Starter pack.",64)
-  for first=1,#C.Characters,3 do
+  for first=1,#C.Characters,2 do
    local strip=row("",224); strip.BackgroundTransparency=1; local stroke=strip:FindFirstChildOfClass("UIStroke"); if stroke then stroke.Enabled=false end
-   for column=0,2 do
+   for column=0,1 do
     local item=C.Characters[first+column]
     if item then
      local n=state.Characters[item.Id] or 0
-     local card=panel(strip,Vector2.new(213,218),Vector2.new(column*228,0),item.Color,true)
-     portrait(card,item.Id,UDim2.fromOffset(25,23),UDim2.fromOffset(160,125))
-     label(card,item.Name,UDim2.fromOffset(205,39),UDim2.fromOffset(4,0),18)
-     label(card,C.Rarities[item.Tier].." • +"..C.ClickGain(item.Id).."/click • ×"..n,UDim2.fromOffset(205,32),UDim2.fromOffset(4,139),15)
-     local equip=button(card,n==0 and "LOCKED" or (state.Equipped==item.Id and "EQUIPPED" or "EQUIP"),189,34,n>0 and palette.Mint or Color3.fromRGB(125,130,130),function() if n>0 then call("Equip",item.Id) else notify(item.Rollable==false and "Sasuke is guaranteed in the Starter pack." or "Unlock this fighter with character spins.") end end); equip.Position=UDim2.fromOffset(12,178); equip.Label.TextSize=18
+     local card=panel(strip,Vector2.new(328,218),Vector2.new(column*348,0),item.Color,true)
+     portrait(card,item.Id,UDim2.fromOffset(80,26),UDim2.fromOffset(168,120))
+     label(card,item.Name,UDim2.fromOffset(310,39),UDim2.fromOffset(9,0),18)
+     label(card,C.Rarities[item.Tier].." • +"..C.ClickGain(item.Id).."/click • ×"..n,UDim2.fromOffset(310,32),UDim2.fromOffset(9,139),15)
+     local equip=button(card,n==0 and "LOCKED" or (state.Equipped==item.Id and "EQUIPPED" or "EQUIP"),304,38,n>0 and palette.Mint or Color3.fromRGB(125,130,130),function() if n>0 then call("Equip",item.Id) else notify(item.Rollable==false and "Sasuke is guaranteed in the Starter pack." or "Unlock this fighter with character spins.") end end); equip.Position=UDim2.fromOffset(12,178); equip.Label.TextSize=18
     end
    end
   end
@@ -367,17 +416,17 @@ render=function()
   end
   odds(true,false)
  elseif page=="Shop" then
-  row("FIGHTER PACKS  •  Choose your rewards below",48)
+  -- Compact four-card store, matching the supplied simulator UI reference.
   local keys={"Starter","Spins","Boosted","Luck"}
   for first=1,4,2 do
-   local strip=row("",230);strip.BackgroundTransparency=1;local stripStroke=strip:FindFirstChildOfClass("UIStroke");if stripStroke then stripStroke.Enabled=false end
+   local strip=row("",176);strip.BackgroundTransparency=1;local stripStroke=strip:FindFirstChildOfClass("UIStroke");if stripStroke then stripStroke.Enabled=false end
    for col=0,1 do
     local key=keys[first+col];local product=C.Products[key]
-    local card=panel(strip,Vector2.new(328,222),Vector2.new(col*348,0),key=="Luck" and Color3.fromRGB(113,227,79) or key=="Boosted" and Color3.fromRGB(191,88,255) or key=="Spins" and Color3.fromRGB(61,197,255) or Color3.fromRGB(255,173,74),true)
-    if key=="Starter" then portrait(card,"sasuke",UDim2.fromOffset(8,45),UDim2.fromOffset(128,110)) else packArt(card,key) end
-    label(card,product.Name,UDim2.fromOffset(310,42),UDim2.fromOffset(9,0),24)
-    label(card,product.Description,UDim2.fromOffset(173,91),UDim2.fromOffset(143,51),17)
-    local choose=button(card,selectedProduct==key and "SELECTED • DETAILS BELOW" or "VIEW REWARDS + ODDS",300,39,palette.Mint,function() selectedProduct=key;render();list.CanvasPosition=Vector2.new(0,540) end);choose.Position=UDim2.fromOffset(14,172);choose.Label.TextSize=16
+    local card=panel(strip,Vector2.new(328,170),Vector2.new(col*348,0),key=="Luck" and Color3.fromRGB(113,227,79) or key=="Boosted" and Color3.fromRGB(191,88,255) or key=="Spins" and Color3.fromRGB(61,197,255) or Color3.fromRGB(255,173,74),true)
+    if key=="Starter" then portrait(card,"sasuke",UDim2.fromOffset(8,42),UDim2.fromOffset(128,110)) else packArt(card,key) end
+    label(card,product.Name,UDim2.fromOffset(310,38),UDim2.fromOffset(9,0),24)
+    label(card,product.Description,UDim2.fromOffset(173,77),UDim2.fromOffset(143,37),17)
+    local choose=button(card,selectedProduct==key and "SELECTED" or "VIEW PACK",172,38,palette.Mint,function() selectedProduct=key;render();list.CanvasPosition=Vector2.new(0,376) end);choose.Position=UDim2.fromOffset(143,121);choose.Label.TextSize=16
    end
   end
   local product=C.Products[selectedProduct]
@@ -457,6 +506,8 @@ local combatButtons={}
 for i,key in ipairs({"M1","Q","E","R"}) do
  local b=button(combatBar,key,146,64,({palette.Cyan,palette.Gold,palette.Mint,palette.Pink})[i],function() if key=="M1" then train() else call("Attack",key) end end); b.Position=UDim2.fromOffset(12+(i-1)*160,13); combatButtons[key]=b
 end
+local healthTrack=panel(canvas,Vector2.new(500,12),Vector2.new(350,625),palette.Ink,false);healthTrack.Visible=false
+local healthFill=Instance.new("Frame",healthTrack);healthFill.Size=UDim2.fromScale(1,1);healthFill.BackgroundColor3=palette.Mint;healthFill.BorderSizePixel=0;corner(healthFill,6)
 local health=label(canvas,"",UDim2.fromOffset(700,35),UDim2.fromOffset(250,600),21,palette.Mint); health.TextStrokeTransparency=0.1
 local reveal=panel(canvas,Vector2.new(630,360),Vector2.new(285,210),palette.Pink,true); reveal.ZIndex=50; reveal.Visible=false
 local revealTier=label(reveal,"",UDim2.fromOffset(590,45),UDim2.fromOffset(20,12),27,palette.White)
@@ -520,9 +571,10 @@ local function party(data)
  end)
 end
 apply=function(s)
- if not s then return end; state=s; offset=s.ServerTime-os.time()
- currencies.Text=string.format("%s COINS",s.Coins)
- gemsLabel.Text=string.format("%s GEMS",s.Gems);winsLabel.Text=s.Wins.." WINS"
+ if not s then return end; state=s;Polish.Aura(p.Character,s.Aura); offset=s.ServerTime-os.time()
+ if coinTween then coinTween:Cancel() end;if gemTween then gemTween:Cancel() end
+ coinTween=Tween:Create(coinCounter,TweenInfo.new(.28,Enum.EasingStyle.Quad),{Value=s.Coins});coinTween:Play()
+ gemTween=Tween:Create(gemCounter,TweenInfo.new(.28,Enum.EasingStyle.Quad),{Value=s.Gems});gemTween:Play();winsLabel.Text=s.Wins.." WINS"
  adminButton.Visible=s.IsAdmin==true or s.Studio==true
  duel.Label.Text="BOSSES";trainingHud()
  if not activeMatch then status.Text="" end
@@ -540,6 +592,7 @@ Event.OnClientEvent:Connect(function(kind,data)
  elseif kind=="Reveal" then playReveal(data)
  elseif kind=="AdminEvent" then party(data)
  elseif kind=="CombatSound" then sound("Click",data=="R" and 0.5 or 0.9)
+  if data=="E" then guardUntil=os.clock()+3;Polish.Guard(p.Character,3) elseif data=="R" then Polish.Pulse(.22) end
  elseif kind=="WheelResult" then
   wheelSpinning=true
   local disk=wheelDisk
@@ -553,13 +606,13 @@ Event.OnClientEvent:Connect(function(kind,data)
    if page=="Wheel" and wheelButton and wheelButton.Parent then wheelButton.Label.Text="CLAIMED • RESETS AT 00:00 UTC" end
   end)
  elseif kind=="MatchStart" then
-  page=nil; window.Visible=false; dim.Visible=false; reveal.Visible=false; activeMatch={Opponent=data.Opponent,Start=os.clock()+data.Countdown,End=os.clock()+data.Countdown+data.Duration}; combatBar.Visible=true; bottom.Visible=false; for _,b in ipairs(bottomNav) do b.Visible=false end; cooldowns={};trainingHud()
- elseif kind=="MatchEnd" then activeMatch=nil;bossLabel.Text="";trainingHud(); combatBar.Visible=false; bottom.Visible=true; for _,b in ipairs(bottomNav) do b.Visible=true end; health.Text=""; status.Text=""; notify(data); task.spawn(function() local r=call("State"); if r then apply(r.State) end end)
+  menuSerial+=1;page=nil; window.Visible=false; dim.Visible=false; reveal.Visible=false; activeMatch={Opponent=data.Opponent,Start=os.clock()+data.Countdown,End=os.clock()+data.Countdown+data.Duration}; combatBar.Visible=true; bottom.Visible=false; for _,b in ipairs(bottomNav) do b.Visible=false end; cooldowns={};trainingHud()
+ elseif kind=="MatchEnd" then activeMatch=nil;guardUntil=0;Polish.ClearGuard();bossLabel.Text="";trainingHud(); combatBar.Visible=false; bottom.Visible=true; for _,b in ipairs(bottomNav) do b.Visible=true end; health.Text=""; status.Text=""; if type(data)=="string" and data:find("BOSS DEFEATED!",1,true)==1 then party({Text=data,Kind="confetti",Duration=2}) else notify(data) end; task.spawn(function() local r=call("State"); if r then apply(r.State) end end)
  elseif kind=="Cooldown" then cooldowns[data.Key]=os.clock()+data.Time end
 end)
 Input.InputBegan:Connect(function(input,processed)
  if not processed and input.KeyCode==Enum.KeyCode.F8 then open("Admin");return end
- if not processed and input.KeyCode==Enum.KeyCode.Escape and page then page=nil;window.Visible=false;dim.Visible=false;return end
+ if input.KeyCode==Enum.KeyCode.Escape and page then closeMenu();return end
  if processed or page or revealing or Input:GetFocusedTextBox() then return end
  if input.UserInputType==Enum.UserInputType.MouseButton1 or input.UserInputType==Enum.UserInputType.Touch then train();return end
  if not activeMatch then return end
@@ -599,17 +652,21 @@ Run.RenderStepped:Connect(function()
   if state.Lucky and time==0 then state.Lucky=false; if page then render() end end
  end
  dim.Visible=window.Visible and not revealing
- trainButton.Visible=state~=nil and page==nil and not revealing
+ trainButton.Visible=state~=nil and not window.Visible and not revealing
+ progressTrack.Visible=trainButton.Visible and not activeMatch
+ healthTrack.Visible=activeMatch~=nil
  strengthLabel.Visible=trainButton.Visible;leaveBoss.Visible=activeMatch~=nil;bossLabel.Visible=activeMatch~=nil;bossTrack.Visible=activeMatch~=nil
  if activeMatch then
   local before=activeMatch.Start-os.clock()
   status.Text=before>0 and ("GET READY • "..math.ceil(before)) or ("VS "..activeMatch.Opponent.."  •  "..math.max(0,math.ceil(activeMatch.End-os.clock())).."s")
   local h=p.Character and p.Character:FindFirstChildOfClass("Humanoid")
   health.Text=h and string.format("HP %d / %d",math.ceil(h.Health),h.MaxHealth) or ""
+  local ratio=h and math.clamp(h.Health/math.max(1,h.MaxHealth),0,1) or 0
+  Tween:Create(healthFill,TweenInfo.new(.12),{Size=UDim2.fromScale(ratio,1),BackgroundColor3=ratio<.3 and palette.Pink or palette.Mint}):Play()
   local hero=state and C.Find(C.Characters,state.Equipped)
   for i,key in ipairs({"M1","Q","E","R"}) do
    local left=math.max(0,(cooldowns[key] or 0)-os.clock())
-   combatButtons[key].Label.Text=left>0 and string.format("%s • %.1fs",key,left) or (key.."\n"..(i==1 and "Train + Strike" or (hero and hero.Skills[i-1] or "")))
+   combatButtons[key].Label.Text=key=="E" and guardUntil>now and string.format("GUARD • %.1fs",guardUntil-now) or left>0 and string.format("%s • %.1fs",key,left) or (key.."\n"..(i==1 and "Train + Strike" or (hero and hero.Skills[i-1] or "")))
   end
  end
 end)
@@ -624,11 +681,45 @@ local function bindCamera(character)
  if humanoid and p.Character==character and workspace.CurrentCamera then
   workspace.CurrentCamera.CameraType=Enum.CameraType.Custom
   workspace.CurrentCamera.CameraSubject=humanoid
+  if state then Polish.Aura(character,state.Aura) end
  end
 end
 p.CharacterAdded:Connect(function(character) task.spawn(bindCamera,character) end)
 if p.Character then task.spawn(bindCamera,p.Character) end
 workspace:GetPropertyChangedSignal("CurrentCamera"):Connect(function()
- if workspace.CurrentCamera then resize();workspace.CurrentCamera:GetPropertyChangedSignal("ViewportSize"):Connect(resize) end
+ if viewportConnection then viewportConnection:Disconnect() end
+ if workspace.CurrentCamera then resize();viewportConnection=workspace.CurrentCamera:GetPropertyChangedSignal("ViewportSize"):Connect(resize) end
  if p.Character then task.spawn(bindCamera,p.Character) end
 end)
+
+relayout=function()
+ local portrait=metrics.Portrait
+ window.Position=modalPosition
+ toast.Size=UDim2.fromOffset(math.min(900,metrics.Width-24),48)
+ logo.Position=UDim2.fromOffset(12,10)
+ local tops={topShop,topFighters,duel}
+ for i,b in ipairs(tops) do
+  b.Position=portrait and UDim2.fromOffset(12+(i-1)*248,154) or UDim2.fromOffset(275+(i-1)*235,7)
+  b.Size=UDim2.fromOffset(portrait and 240 or 220,54)
+ end
+ header.Position=portrait and UDim2.fromOffset(12,76) or UDim2.fromOffset(12,648)
+ for i,b in ipairs(bottomNav) do b.Position=portrait and UDim2.fromOffset(18+(i-1)*124,1106) or UDim2.fromOffset(285+(i-1)*105,666);b.Size=UDim2.fromOffset(portrait and 104 or 94,84) end
+ for _,item in ipairs({shop,quests,goalText,practice,luck,boost}) do item.Visible=not portrait end
+ trainButton.Position=portrait and UDim2.fromOffset(140,936) or UDim2.fromOffset(445,530)
+ trainButton.Size=UDim2.fromOffset(portrait and 480 or 310,60)
+ strengthLabel.Position=portrait and UDim2.fromOffset(80,890) or UDim2.fromOffset(330,495);strengthLabel.Size=UDim2.fromOffset(portrait and 600 or 540,34)
+ bottom.Position=portrait and UDim2.fromOffset(55,860) or UDim2.fromOffset(275,460)
+ progressTrack.Position=portrait and UDim2.fromOffset(130,1020) or UDim2.fromOffset(350,608)
+ healthTrack.Position=portrait and UDim2.fromOffset(130,1074) or UDim2.fromOffset(350,625)
+ status.Position=portrait and UDim2.fromOffset(20,224) or UDim2.fromOffset(240,78)
+ bossLabel.Position=portrait and UDim2.fromOffset(30,280) or UDim2.fromOffset(250,150)
+ bossTrack.Position=portrait and UDim2.fromOffset(130,322) or UDim2.fromOffset(350,189)
+ leaveBoss.Position=portrait and UDim2.fromOffset(285,350) or UDim2.fromOffset(10,570)
+ combatBar.Position=portrait and UDim2.fromOffset(55,1090) or UDim2.fromOffset(275,640)
+ health.Position=portrait and UDim2.fromOffset(30,1035) or UDim2.fromOffset(250,600)
+ reveal.Position=portrait and UDim2.fromOffset(65,380) or UDim2.fromOffset(285,210)
+ buffIcon.Position=portrait and UDim2.fromOffset(680,70) or UDim2.fromOffset(1121,671)
+ buffTip.Position=portrait and UDim2.fromOffset(470,112) or UDim2.fromOffset(947,633)
+ adminButton.Position=portrait and UDim2.fromOffset(540,16) or UDim2.fromOffset(1004,610)
+end
+resize()

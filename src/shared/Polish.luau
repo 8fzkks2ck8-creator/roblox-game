@@ -18,6 +18,38 @@ Run.RenderStepped:Connect(function()
   if item.Parent then item.CFrame=base*CFrame.new(0,math.sin(now*1.8+base.X)*.45,0)*CFrame.Angles(0,now*.4,0) else floating[item]=nil end
  end
 end)
+-- Sparse local fireflies keep the open plaza lively without replicated particle spam.
+local function ambience(world)
+ if world.Name~="RiftWorld" or world:FindFirstChild("LocalFireflies") then return end
+ local anchor=Instance.new("Part");anchor.Name="LocalFireflies";anchor.Size=Vector3.new(195,12,175);anchor.Position=Vector3.new(0,7,0);anchor.Anchored=true;anchor.CanCollide=false;anchor.CanTouch=false;anchor.CanQuery=false;anchor.Transparency=1;anchor.Parent=world
+ local motes=Instance.new("ParticleEmitter",anchor);motes.Texture="rbxasset://textures/particles/sparkles_main.dds";motes.Rate=10;motes.Lifetime=NumberRange.new(3,5);motes.Speed=NumberRange.new(.1,.4);motes.SpreadAngle=Vector2.new(180,180);motes.Shape=Enum.ParticleEmitterShape.Box;motes.ShapeStyle=Enum.ParticleEmitterShapeStyle.Volume;motes.LightEmission=1;motes.Color=ColorSequence.new(Color3.fromRGB(255,250,169));motes.Size=NumberSequence.new({NumberSequenceKeypoint.new(0,0),NumberSequenceKeypoint.new(.4,.2),NumberSequenceKeypoint.new(1,0)});motes.Transparency=NumberSequence.new({NumberSequenceKeypoint.new(0,1),NumberSequenceKeypoint.new(.25,.15),NumberSequenceKeypoint.new(1,1)})
+end
+workspace.ChildAdded:Connect(function(child) if child.Name=="RiftWorld" then task.defer(ambience,child) end end)
+local current=workspace:FindFirstChild("RiftWorld");if current then ambience(current) end
+local guard
+local guardSerial=0
+function P.ClearGuard()
+ guardSerial+=1;if guard then guard:Destroy();guard=nil end
+end
+function P.Guard(character,duration)
+ P.ClearGuard();local serial=guardSerial
+ local root=character and character:FindFirstChild("HumanoidRootPart");if not root then return end
+ local shield=Instance.new("Part");shield.Name="LocalGuardShell";shield.Shape=Enum.PartType.Ball;shield.Size=Vector3.new(7,8,7);shield.CFrame=root.CFrame;shield.Material=Enum.Material.ForceField;shield.Color=Color3.fromRGB(130,230,255);shield.Transparency=.45;shield.CanCollide=false;shield.CanTouch=false;shield.CanQuery=false;shield.Massless=true;shield.Parent=character
+ local weld=Instance.new("WeldConstraint",shield);weld.Part0=root;weld.Part1=shield;guard=shield
+ Tween:Create(shield,TweenInfo.new(duration),{Transparency=.95}):Play()
+ task.delay(duration,function() if guardSerial==serial then P.ClearGuard() end end)
+end
+local auraCharacter,auraId
+function P.Aura(character,id)
+ if not character then return end
+ local root=character:FindFirstChild("HumanoidRootPart");if not root then return end
+ if auraCharacter==character and auraId==id then return end
+ auraCharacter=character;auraId=id
+ local old=root:FindFirstChild("RiftLocalAura");if old then old:Destroy() end
+ local aura=C.Find(C.Cosmetics,id);if not aura then return end
+ local anchor=Instance.new("Attachment",root);anchor.Name="RiftLocalAura";anchor.Position=Vector3.new(0,-1,0)
+ local particles=Instance.new("ParticleEmitter",anchor);particles.Texture="rbxasset://textures/particles/sparkles_main.dds";particles.Color=ColorSequence.new(aura.Color);particles.LightEmission=.8;particles.Rate=6+aura.Tier*2;particles.Lifetime=NumberRange.new(.5,1);particles.Speed=NumberRange.new(1,3);particles.SpreadAngle=Vector2.new(65,65);particles.Size=NumberSequence.new({NumberSequenceKeypoint.new(0,.15),NumberSequenceKeypoint.new(1,0)});particles.Transparency=NumberSequence.new(.3)
+end
 function P.Pulse(amount)
  -- A short tint pulse avoids camera drift, motion sickness, and stacked FOV tweens.
  local effect=Instance.new("ColorCorrectionEffect",game:GetService("Lighting"));effect.Name="RiftImpact";effect.Brightness=amount*.25;effect.TintColor=Color3.fromRGB(239,230,255)

@@ -10,7 +10,7 @@ local function hum(p) local m=model(p); return m and m:FindFirstChildOfClass("Hu
 local function root(p) local m=model(p); return m and m:FindFirstChild("HumanoidRootPart") end
 local function tell(p,kind,data) if p:IsA("Player") then Send(p,kind,data) end end
 local function visual(a,b,color,size)
- local p=Instance.new("Part"); p.Anchored=true; p.CanCollide=false; p.CanTouch=false; p.CanQuery=false; p.Material=Enum.Material.Neon; p.Color=color; p.Size=Vector3.new(size,size,math.max((a-b).Magnitude,0.1)); p.CFrame=CFrame.lookAt((a+b)/2,b); p.Parent=workspace; Debris:AddItem(p,0.18)
+ local p=Instance.new("Part"); p.Anchored=true; p.CanCollide=false; p.CanTouch=false; p.CanQuery=false; p.Material=Enum.Material.Neon; p.Color=color; p.Size=Vector3.new(size,size,math.max((a-b).Magnitude,0.1)); p.CFrame=CFrame.lookAt((a+b)/2,b); p.Parent=workspace;game:GetService("TweenService"):Create(p,TweenInfo.new(.22),{Transparency=1,Size=Vector3.new(.05,.05,p.Size.Z)}):Play();Debris:AddItem(p,.25)
 end
 local function sphere(pos,color,radius)
  local p=Instance.new("Part"); p.Shape=Enum.PartType.Ball; p.Size=Vector3.new(1,1,1); p.Position=pos; p.Anchored=true; p.CanCollide=false; p.CanTouch=false; p.CanQuery=false; p.Material=Enum.Material.Neon; p.Color=color; p.Transparency=0.4; p.Parent=workspace
@@ -32,8 +32,11 @@ local function decorate(p)
  if custom and custom:IsA("Model") and not usingCustom and p:IsA("Player") and not B.Active[p] then
   if custom:FindFirstChildOfClass("Humanoid") and custom:FindFirstChild("HumanoidRootPart") then
    local replacement=custom:Clone();replacement.Name=p.Name;replacement:SetAttribute("RiftCharacterId",h.Id)
+   local keptAnimate=false
    for _,v in ipairs(replacement:GetDescendants()) do
-    if v:IsA("LuaSourceContainer") and not (v:IsA("LocalScript") and v.Name=="Animate") then v:Destroy() elseif v:IsA("BasePart") then v.Anchored=false end
+    if v:IsA("LuaSourceContainer") then
+     if v:IsA("LocalScript") and v.Name=="Animate" and v.Parent==replacement and not keptAnimate then keptAnimate=true else v:Destroy() end
+    elseif v:IsA("BasePart") then v.Anchored=false end
    end
    local animate=m:FindFirstChild("Animate"); if animate and not replacement:FindFirstChild("Animate") then animate:Clone().Parent=replacement end
    local rh=replacement:FindFirstChildOfClass("Humanoid")
@@ -56,7 +59,7 @@ local function decorate(p)
  if head and not outfit.Bald then
   local hair=Instance.new("Folder",m); hair.Name="RiftOutfit"
   for i=-2,2 do
-   local spike=Instance.new("WedgePart"); spike.Name="Hair tuft"; spike.Size=Vector3.new(0.45,0.7+math.abs(i)*0.12,0.9); spike.Color=Color3.fromRGB(table.unpack(outfit.Hair)); spike.CanCollide=false; spike.CanQuery=false; spike.Massless=true; spike.CFrame=head.CFrame*CFrame.new(i*0.32,0.6,0.1)*CFrame.Angles(0,0,-i*0.16); spike.Parent=hair
+   local spike=Instance.new("WedgePart"); spike.Name="Hair tuft"; spike.Size=Vector3.new(0.45,0.7+math.abs(i)*0.12,0.9); spike.Color=Color3.fromRGB(table.unpack(outfit.Hair)); spike.CanCollide=false; spike.CanTouch=false; spike.CanQuery=false; spike.Massless=true; spike.CFrame=head.CFrame*CFrame.new(i*0.32,0.6,0.1)*CFrame.Angles(0,0,-i*0.16); spike.Parent=hair
    local weld=Instance.new("WeldConstraint",spike); weld.Part0=head; weld.Part1=spike
   end
  end
@@ -71,7 +74,7 @@ local function decorate(p)
   local folder=Instance.new("Folder",m); folder.Name="RiftAura"
   for i=1,a.Tier+2 do
    local angle=i*math.pi*2/(a.Tier+2)
-   local orb=Instance.new("Part"); orb.Name="Aura stud"; orb.Shape=Enum.PartType.Ball; orb.Size=Vector3.new(0.45,0.45,0.45); orb.Material=Enum.Material.Neon; orb.Color=a.Color; orb.CanCollide=false; orb.CanQuery=false; orb.Massless=true; orb.CFrame=r.CFrame*CFrame.new(math.cos(angle)*2,1,math.sin(angle)*2); orb.Parent=folder
+   local orb=Instance.new("Part"); orb.Name="Aura stud"; orb.Shape=Enum.PartType.Ball; orb.Size=Vector3.new(0.45,0.45,0.45); orb.Material=Enum.Material.Neon; orb.Color=a.Color; orb.CanCollide=false; orb.CanTouch=false; orb.CanQuery=false; orb.Massless=true; orb.CFrame=r.CFrame*CFrame.new(math.cos(angle)*2,1,math.sin(angle)*2); orb.Parent=folder
    local weld=Instance.new("WeldConstraint",orb); weld.Part0=r; weld.Part1=orb
   end
  end

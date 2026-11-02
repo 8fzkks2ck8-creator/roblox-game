@@ -1,120 +1,167 @@
--- Lantern sanctuary. RiftLayout still controls spawn and arena locations.
-local W={Arenas={}}
-local Lighting=game:GetService("Lighting")
+-- Bright classic simulator plaza, based on the supplied studded garden reference.
+local W = {Arenas = {}}
+local Lighting = game:GetService("Lighting")
 function W.Build()
- W.Arenas={}
- local layout=workspace:FindFirstChild("RiftLayout")
- local marker=layout and layout:FindFirstChild("LobbySpawn")
- W.Spawn=marker and marker.CFrame or CFrame.new(0,5,40)
- local prior=workspace:FindFirstChild("RiftWorld");if prior then prior:Destroy() end
- local world=Instance.new("Folder",workspace);world.Name="RiftWorld"
- local stone=Color3.fromRGB(54,62,86)
- local pale=Color3.fromRGB(208,211,229)
- local grass=Color3.fromRGB(75,117,112)
- local wood=Color3.fromRGB(69,42,65)
- local pink=Color3.fromRGB(246,155,202)
- local gold=Color3.fromRGB(255,208,126)
- local cyan=Color3.fromRGB(102,222,244)
- local function part(name,size,pos,color,material)
-  local p=Instance.new("Part");p.Name=name;p.Size=size;p.Position=pos;p.Anchored=true;p.Color=color;p.Material=material or Enum.Material.SmoothPlastic
-  p.TopSurface=Enum.SurfaceType.Smooth;p.BottomSurface=Enum.SurfaceType.Smooth;p.Parent=world;return p
+ W.Arenas = {}
+ local layout = workspace:FindFirstChild("RiftLayout")
+ local marker = layout and layout:FindFirstChild("LobbySpawn")
+ W.Spawn = marker and marker.CFrame or CFrame.new(0, 5, 40)
+ local old = workspace:FindFirstChild("RiftWorld"); if old then old:Destroy() end
+ local world = Instance.new("Folder", workspace); world.Name = "RiftWorld"
+ local lime = Color3.fromRGB(166, 233, 42)
+ local green = Color3.fromRGB(137, 203, 35)
+ local earth = Color3.fromRGB(184, 121, 98)
+ local wood = Color3.fromRGB(165, 103, 75)
+ local white = Color3.fromRGB(241, 242, 255)
+ local lavender = Color3.fromRGB(160, 162, 248)
+ local blue = Color3.fromRGB(80, 129, 228)
+ local red = Color3.fromRGB(242, 45, 74)
+ local gold = Color3.fromRGB(255, 220, 105)
+ local function part(name, size, pos, color, material)
+  local p = Instance.new("Part")
+  p.Name = name; p.Size = size; p.Position = pos; p.Anchored = true
+  p.Color = color; p.Material = material or Enum.Material.Plastic
+  p.TopSurface = Enum.SurfaceType.Studs; p.BottomSurface = Enum.SurfaceType.Smooth
+  p.FrontSurface = Enum.SurfaceType.Studs; p.BackSurface = Enum.SurfaceType.Studs
+  p.LeftSurface = Enum.SurfaceType.Studs; p.RightSurface = Enum.SurfaceType.Studs
+  p.Parent = world
+  return p
  end
  local function decor(p)
-  p.CanCollide=false;p.CanTouch=false;p.CanQuery=false;return p
+  p.CanCollide = false; p.CanTouch = false; p.CanQuery = false
+  return p
  end
- local function disc(name,pos,radius,height,color,material)
-  local p=part(name,Vector3.new(height,radius*2,radius*2),pos,color,material)
-  p.Shape=Enum.PartType.Cylinder;p.CFrame=CFrame.new(pos)*CFrame.Angles(0,0,math.pi/2);return p
+ local function sign(text, pos, width, color)
+  part("Sign frame", Vector3.new(width + 1.5, 5.5, .8), pos, lavender)
+  part("Sign inset", Vector3.new(width, 4.2, 1), pos, blue)
+  local anchor = decor(part("Wayfinding", Vector3.one, pos + Vector3.new(0, 0, 1), color))
+  anchor.Transparency = 1
+  local gui = Instance.new("BillboardGui", anchor); gui.Size = UDim2.fromOffset(width * 18, 70)
+  gui.MaxDistance = 150; gui.LightInfluence = 0
+  local label = Instance.new("TextLabel", gui); label.Size = UDim2.fromScale(1, 1)
+  label.BackgroundTransparency = 1; label.Font = Enum.Font.FredokaOne
+  label.Text = text; label.TextSize = 27; label.TextWrapped = true
+  label.TextColor3 = color; label.TextStrokeTransparency = .15
  end
- local function sign(text,pos,width,color)
-  local anchor=decor(part("Wayfinding",Vector3.one,pos,color));anchor.Transparency=1
-  local gui=Instance.new("BillboardGui",anchor);gui.Size=UDim2.fromOffset(width,62);gui.MaxDistance=100;gui.LightInfluence=0;gui.StudsOffset=Vector3.zero
-  local label=Instance.new("TextLabel",gui);label.Size=UDim2.fromScale(1,1);label.BackgroundTransparency=1;label.Font=Enum.Font.GothamBold;label.Text=text;label.TextSize=22;label.TextWrapped=true;label.TextColor3=color;label.TextStrokeTransparency=.45
+ local function tree(x, z, height)
+  part("Studded trunk", Vector3.new(3, height, 3), Vector3.new(x, height / 2, z), wood)
+  for layer = 0, 2 do
+   local width = 13 - layer * 2.2
+   local p = decor(part("Block canopy", Vector3.new(width, 4, width), Vector3.new(x, height + layer * 3, z), layer == 1 and lime or green))
+   p.CFrame = p.CFrame * CFrame.Angles(0, math.rad(layer * 16), 0)
+  end
+ end
+ local function fence(x, z, length)
+  for dz = -length / 2, length / 2, 6 do
+   part("Fence post", Vector3.new(.9, 3.5, .9), Vector3.new(x, 1.75, z + dz), wood)
+  end
+  for _, y in ipairs({1.15, 2.6}) do part("Fence rail", Vector3.new(.55, .6, length), Vector3.new(x, y, z), earth) end
  end
  local function lamp(pos)
-  part("Lantern pedestal",Vector3.new(2,.8,2),pos+Vector3.new(0,.4,0),stone)
-  part("Lantern stem",Vector3.new(.5,4,.5),pos+Vector3.new(0,2.6,0),wood)
-  local glow=decor(part("Lantern glow",Vector3.new(1.3,1.8,1.3),pos+Vector3.new(0,5,0),gold,Enum.Material.Neon))
-  part("Lantern cap",Vector3.new(2.2,.4,2.2),pos+Vector3.new(0,6.1,0),wood)
-  local light=Instance.new("PointLight",glow);light.Color=gold;light.Range=15;light.Brightness=.7
+  part("Lantern post", Vector3.new(.9, 9, .9), pos + Vector3.new(0, 4.5, 0), wood)
+  part("Lantern base", Vector3.new(2.2, .4, 2.2), pos + Vector3.new(0, 9, 0), lavender)
+  local glow = decor(part("Warm lantern", Vector3.new(1.4, 2.2, 1.4), pos + Vector3.new(0, 10.2, 0), gold, Enum.Material.Neon))
+  part("Lantern roof", Vector3.new(2.4, .5, 2.4), pos + Vector3.new(0, 11.5, 0), lavender)
+  local light = Instance.new("PointLight", glow); light.Color = gold; light.Range = 15; light.Brightness = .55
  end
- local function cherry(x,z,height)
-  local pos=Vector3.new(x,0,z)
-  part("Sakura trunk",Vector3.new(2,height,2),pos+Vector3.new(0,height/2,0),wood)
-  for i=1,5 do
-   local angle=i*math.pi*2/5
-   local crown=decor(part("Sakura canopy",Vector3.new(10,6,10),pos+Vector3.new(math.cos(angle)*4,height+1+ i%2*2,math.sin(angle)*4),i%2==0 and pink or Color3.fromRGB(209,129,188)))
-   crown.Shape=Enum.PartType.Ball
+ -- Broad paths and flush platforms leave the center of the avenue unobstructed.
+ part("Garden island", Vector3.new(224, 13, 204), Vector3.new(0, -6.5, 0), earth)
+ part("Studded grass", Vector3.new(224, 1, 204), Vector3.new(0, -.1, 0), lime)
+ part("Avenue white border", Vector3.new(24, .5, 190), Vector3.new(0, .45, 0), white)
+ part("Red avenue", Vector3.new(21, .6, 190), Vector3.new(0, .51, 0), red)
+ part("Crossway border", Vector3.new(205, .4, 17), Vector3.new(0, .45, 0), white)
+ part("Lavender crossway", Vector3.new(205, .5, 14), Vector3.new(0, .5, 0), lavender)
+ -- Raised accents on the avenue make the classic stud look visible at a distance.
+ -- Most surfaces use native studs instead of thousands of individual geometry parts.
+ for z = -90, 90, 6 do
+  for _, x in ipairs({-7, -3.5, 0, 3.5, 7}) do
+   decor(part("Avenue stud", Vector3.new(1, .1, 1), Vector3.new(x, .86, z), Color3.fromRGB(220, 38, 67)))
   end
  end
- part("Floating sanctuary",Vector3.new(184,12,164),Vector3.new(0,-6.5,0),stone,Enum.Material.Slate)
- part("Moss garden",Vector3.new(182,1,162),Vector3.new(0,-.1,0),grass,Enum.Material.Grass)
- part("Main avenue trim",Vector3.new(23,.5,150),Vector3.new(0,.5,0),pale)
- part("Main avenue",Vector3.new(21,.6,150),Vector3.new(0,.55,0),stone)
- part("Cross avenue",Vector3.new(164,.6,18),Vector3.new(0,.56,0),stone)
- for _,x in ipairs({-10.5,10.5}) do decor(part("Avenue light",Vector3.new(.12,.1,146),Vector3.new(x,.9,0),cyan,Enum.Material.Neon)) end
- for z=-65,65,10 do decor(part("Paving joint",Vector3.new(20,.04,.15),Vector3.new(0,.88,z),pale)) end
- -- Low perimeter rail and an invisible roofless boundary prevent accidental falls.
- for _,x in ipairs({-91,91}) do
-  part("Perimeter plinth",Vector3.new(2,2,164),Vector3.new(x,1,0),stone)
-  local wall=part("Island boundary",Vector3.new(1,70,164),Vector3.new(x,35,0),stone);wall.Transparency=1
+ for _, x in ipairs({-18, 18}) do fence(x, 62, 42); fence(x, -35, 28) end
+ for _, x in ipairs({-25, 25}) do for _, z in ipairs({-78, -10, 29, 83}) do lamp(Vector3.new(x, 0, z)) end end
+ for _, x in ipairs({-98, 98}) do for _, z in ipairs({-83, -44, 8, 61, 88}) do tree(x, z, 16 + math.abs(z) % 5) end end
+ for _, x in ipairs({-69, -40, 40, 69}) do tree(x, 85, 14); tree(x, -93, 15) end
+ -- Stepped grassy cliffs enclose the plaza like the reference without hiding kiosks.
+ for i = -3, 3 do
+  local h = 17 + math.abs(i) * 3
+  part("Back terrace", Vector3.new(34, h, 17), Vector3.new(i * 34, h / 2 - 4, -112), earth)
+  part("Back terrace grass", Vector3.new(35, 1.5, 19), Vector3.new(i * 34, h - 3, -112), green)
  end
- for _,z in ipairs({-81,81}) do
-  part("Perimeter plinth",Vector3.new(184,2,2),Vector3.new(0,1,z),stone)
-  local wall=part("Island boundary",Vector3.new(184,70,1),Vector3.new(0,35,z),stone);wall.Transparency=1
- end
- for _,x in ipairs({-72,-35,35,72}) do for _,z in ipairs({-64,62}) do cherry(x,z,12+math.abs(x)%4) end end
- for _,x in ipairs({-78,78}) do cherry(x,-25,15);cherry(x,22,13) end
- for _,x in ipairs({-16,16}) do for _,z in ipairs({-60,-30,10,46,70}) do lamp(Vector3.new(x,0,z)) end end
- -- Shallow reflecting pools sit beside the spawn, away from walking routes.
- for _,x in ipairs({-43,43}) do
-  part("Pool basin",Vector3.new(24,.6,14),Vector3.new(x,.3,48),stone)
-  local water=decor(part("Reflecting water",Vector3.new(21,.15,11),Vector3.new(x,.65,48),cyan,Enum.Material.Glass));water.Transparency=.35;water.Reflectance=.22
-  for i=1,3 do disc("Floating lily",Vector3.new(x-7+i*4,.82,47+i%2*2),1,.15,grass) end
- end
- local function kiosk(name,text,pos,color,action)
-  disc(name.." dais",pos,13,1,stone)
-  disc(name.." inset",pos+Vector3.new(0,.55,0),11,.15,color)
-  for _,dx in ipairs({-10,10}) do
-   part("Shrine pillar",Vector3.new(1.2,13,1.2),pos+Vector3.new(dx,6,-6),wood)
-   part("Shrine pillar collar",Vector3.new(1.8,.5,1.8),pos+Vector3.new(dx,3,-6),gold)
+ for _, side in ipairs({-1, 1}) do
+  for z = -84, 84, 42 do
+   part("Side terrace", Vector3.new(14, 20, 40), Vector3.new(side * 120, 6, z), earth)
+   part("Side terrace grass", Vector3.new(16, 1.5, 41), Vector3.new(side * 120, 16.8, z), green)
   end
-  part("Shrine lintel",Vector3.new(26,1.2,3),pos+Vector3.new(0,12,-6),wood)
-  part("Shrine roof",Vector3.new(29,.6,5),pos+Vector3.new(0,13,-6),stone)
-  decor(part("Shrine light strip",Vector3.new(22,.2,.2),pos+Vector3.new(0,11.2,-4.4),color,Enum.Material.Neon))
-  sign(text,pos+Vector3.new(0,10,-4),235,color)
-  local orb=decor(part(name,Vector3.new(3,3,3),pos+Vector3.new(0,3,0),color,Enum.Material.Neon));orb.Shape=Enum.PartType.Ball;orb:SetAttribute("RiftFloat",true)
-  local prompt=Instance.new("ProximityPrompt",orb);prompt.ActionText="Open";prompt.ObjectText=text;prompt.HoldDuration=0;prompt.MaxActivationDistance=14;prompt.RequiresLineOfSight=false;prompt:SetAttribute("RiftAction",action)
  end
- kiosk("Summon","SUMMON FIGHTERS",Vector3.new(-45,1,-26),cyan,"Summon")
- kiosk("Cosmetics","AURA SHRINE",Vector3.new(45,1,-26),Color3.fromRGB(192,147,255),"Cosmetics")
- kiosk("Starter","RIFT SHOP",Vector3.new(-45,1,20),gold,"Shop")
- kiosk("Wheel","DAILY WHEEL",Vector3.new(45,1,20),Color3.fromRGB(113,239,184),"Wheel")
- kiosk("Bosses","BOSS GATE",Vector3.new(0,1,-55),pink,"Bosses")
- sign("ANIME RIFT\nTHE LANTERN SANCTUARY",Vector3.new(0,23,-64),430,pale)
- local spawn=Instance.new("SpawnLocation",world);spawn.Name="SanctuarySpawn";spawn.Size=Vector3.new(9,.4,9);spawn.CFrame=W.Spawn*CFrame.new(0,-4,0);spawn.Anchored=true;spawn.Neutral=true;spawn.Transparency=1;spawn.Duration=0
- -- Preserve all original arena markers and combat bounds.
- for i=1,3 do
-  local markers=layout and layout:FindFirstChild("Arena"..i)
-  local centerMarker=markers and markers:FindFirstChild("Center")
-  local center=centerMarker and centerMarker.Position or Vector3.new((i-2)*155,0,-240)
-  local p1=markers and markers:FindFirstChild("Player1");local p2=markers and markers:FindFirstChild("Player2")
-  local tint=({cyan,pink,Color3.fromRGB(192,147,255)})[i]
-  part("Boss island "..i,Vector3.new(112,10,112),center-Vector3.new(0,5,0),stone,Enum.Material.Slate)
-  part("Arena floor",Vector3.new(104,.3,104),center,stone)
-  decor(disc("Arena sigil",center+Vector3.new(0,.22,0),25,.12,tint,Enum.Material.Neon)).Transparency=.72
-  decor(disc("Arena sigil inset",center+Vector3.new(0,.3,0),23,.12,stone))
-  for _,dx in ipairs({-53,53}) do part("Arena wall",Vector3.new(2,9,108),center+Vector3.new(dx,4.5,0),stone) end
-  for _,dz in ipairs({-53,53}) do part("Arena wall",Vector3.new(108,9,2),center+Vector3.new(0,4.5,dz),stone) end
-  for _,dx in ipairs({-42,42}) do for _,dz in ipairs({-42,42}) do lamp(center+Vector3.new(dx,0,dz)) end end
-  sign("RIFT ARENA 0"..i,center+Vector3.new(0,15,-50),350,tint)
-  W.Arenas[i]={Center=center,Spawns={p1 and p1.CFrame or CFrame.new(center+Vector3.new(0,4,28)),p2 and p2.CFrame or CFrame.new(center+Vector3.new(0,4,-28))}}
+ -- Transparent boundaries cover the front edge as well as the cliff-backed edges.
+ for _, x in ipairs({-112, 112}) do local p = part("Island boundary", Vector3.new(1, 80, 204), Vector3.new(x, 40, 0), white); p.Transparency = 1 end
+ for _, z in ipairs({-102, 102}) do local p = part("Island boundary", Vector3.new(224, 80, 1), Vector3.new(0, 40, z), white); p.Transparency = 1 end
+ local function kiosk(name, text, pos, color, action)
+  part(name .. " platform trim", Vector3.new(30, .7, 23), pos, white)
+  part(name .. " platform", Vector3.new(27, .8, 20), pos + Vector3.new(0, .15, 0), lavender)
+  part(name .. " display pad", Vector3.new(10, 1, 9), pos + Vector3.new(0, .8, 0), color)
+  for _, dx in ipairs({-12, 12}) do part("Kiosk signpost", Vector3.new(1.2, 11, 1.2), pos + Vector3.new(dx, 5.5, -7), lavender) end
+  sign(text, pos + Vector3.new(0, 11, -7), 26, white)
+  local orb = decor(part(name, Vector3.new(3.6, 3.6, 3.6), pos + Vector3.new(0, 4, 0), color, Enum.Material.Neon))
+  orb.Shape = Enum.PartType.Ball; orb:SetAttribute("RiftFloat", true)
+  local prompt = Instance.new("ProximityPrompt", orb)
+  prompt.ActionText = "Open"; prompt.ObjectText = text; prompt.HoldDuration = 0
+  prompt.MaxActivationDistance = 14; prompt.RequiresLineOfSight = false; prompt:SetAttribute("RiftAction", action)
  end
- Lighting.ClockTime=17.6;Lighting.Brightness=2;Lighting.Ambient=Color3.fromRGB(115,111,146);Lighting.OutdoorAmbient=Color3.fromRGB(139,145,172)
- for _,name in ipairs({"RiftBloom","RiftAtmosphere"}) do local old=Lighting:FindFirstChild(name);if old then old:Destroy() end end
- local bloom=Instance.new("BloomEffect",Lighting);bloom.Name="RiftBloom";bloom.Intensity=.24;bloom.Size=28;bloom.Threshold=1.3
- local atmosphere=Instance.new("Atmosphere",Lighting);atmosphere.Name="RiftAtmosphere";atmosphere.Density=.22;atmosphere.Color=Color3.fromRGB(204,194,227);atmosphere.Decay=Color3.fromRGB(117,104,151)
- if layout then for _,m in ipairs(layout:GetDescendants()) do if m:IsA("BasePart") then m.Transparency=1;m.CanCollide=false;m.CanTouch=false;m.CanQuery=false end end end
+ kiosk("Summon", "SUMMON FIGHTERS", Vector3.new(-51, 1, -31), Color3.fromRGB(79, 218, 255), "Summon")
+ kiosk("Cosmetics", "AURA GARDEN", Vector3.new(51, 1, -31), Color3.fromRGB(205, 122, 255), "Cosmetics")
+ kiosk("Starter", "RIFT STORE", Vector3.new(-51, 1, 32), gold, "Shop")
+ kiosk("Wheel", "DAILY WHEEL", Vector3.new(51, 1, 32), Color3.fromRGB(133, 245, 83), "Wheel")
+ kiosk("Bosses", "BOSS CHALLENGES", Vector3.new(0, 1, -75), Color3.fromRGB(255, 101, 158), "Bosses")
+ for _, x in ipairs({-77, 77}) do
+  for _, z in ipairs({-62, 0, 62}) do
+   part("Garden display trim", Vector3.new(22, .6, 16), Vector3.new(x, .6, z), white)
+   part("Garden display platform", Vector3.new(20, .7, 14), Vector3.new(x, .7, z), lavender)
+   for j = 1, 3 do part("Little block bush", Vector3.new(3, 2 + j % 2, 3), Vector3.new(x - 4 + j * 2, 2, z), green) end
+  end
+ end
+ -- Segmented neon rainbow, with a few soft cloud clusters above the rear cliffs.
+ local rainbow = {Color3.fromRGB(255, 99, 162), Color3.fromRGB(255, 183, 103), Color3.fromRGB(255, 244, 134), Color3.fromRGB(131, 255, 157), Color3.fromRGB(119, 218, 255)}
+ for band, color in ipairs(rainbow) do
+  local radius = 31 - band * 1.6
+  for step = 0, 23 do
+   local angle = (step + .5) * math.pi / 24
+   local p = decor(part("Rainbow arch", Vector3.new(4.2, 1.2, 2), Vector3.new(math.cos(angle) * radius, 15 + math.sin(angle) * radius, -99), color, Enum.Material.Neon))
+   p.CFrame = CFrame.new(p.Position) * CFrame.Angles(0, 0, angle + math.pi / 2)
+  end
+ end
+ for _, x in ipairs({-142, -78, 78, 142}) do
+  for j = 1, 3 do
+   local p = decor(part("Cloud puff", Vector3.new(23, 12, 15), Vector3.new(x + j * 9, 64 + j % 2 * 5, -130), white))
+   p.Shape = Enum.PartType.Ball
+  end
+ end
+ sign("ANIME RIFT", Vector3.new(0, 21, -100), 30, white)
+ local spawn = Instance.new("SpawnLocation", world)
+ spawn.Name = "SanctuarySpawn"; spawn.Size = Vector3.new(9, .4, 9)
+ spawn.CFrame = W.Spawn * CFrame.new(0, -4, 0); spawn.Anchored = true; spawn.Neutral = true; spawn.Transparency = 1; spawn.Duration = 0
+ for i = 1, 3 do
+  local markers = layout and layout:FindFirstChild("Arena" .. i)
+  local centerMarker = markers and markers:FindFirstChild("Center")
+  local center = centerMarker and centerMarker.Position or Vector3.new((i - 2) * 155, 0, -240)
+  local p1 = markers and markers:FindFirstChild("Player1"); local p2 = markers and markers:FindFirstChild("Player2")
+  local tint = ({Color3.fromRGB(109, 234, 158), Color3.fromRGB(255, 137, 156), lavender})[i]
+  part("Boss island " .. i, Vector3.new(112, 10, 112), center - Vector3.new(0, 5, 0), earth)
+  part("Arena floor", Vector3.new(104, .3, 104), center, tint)
+  part("Arena center", Vector3.new(30, .1, 30), center + Vector3.new(0, .25, 0), white)
+  for _, dx in ipairs({-53, 53}) do part("Arena wall", Vector3.new(2, 9, 108), center + Vector3.new(dx, 4.5, 0), lavender) end
+  for _, dz in ipairs({-53, 53}) do part("Arena wall", Vector3.new(108, 9, 2), center + Vector3.new(0, 4.5, dz), lavender) end
+  sign("BOSS ARENA " .. i, center + Vector3.new(0, 14, -50), 29, white)
+  W.Arenas[i] = {Center = center, Spawns = {p1 and p1.CFrame or CFrame.new(center + Vector3.new(0, 4, 28)), p2 and p2.CFrame or CFrame.new(center + Vector3.new(0, 4, -28))}}
+ end
+ Lighting.ClockTime = 13.5; Lighting.Brightness = 2.4
+ Lighting.Ambient = Color3.fromRGB(151, 160, 193); Lighting.OutdoorAmbient = Color3.fromRGB(177, 193, 219)
+ for _, name in ipairs({"RiftBloom", "RiftAtmosphere"}) do local effect = Lighting:FindFirstChild(name); if effect then effect:Destroy() end end
+ local bloom = Instance.new("BloomEffect", Lighting); bloom.Name = "RiftBloom"; bloom.Intensity = .22; bloom.Size = 26; bloom.Threshold = 1.5
+ local atmosphere = Instance.new("Atmosphere", Lighting); atmosphere.Name = "RiftAtmosphere"; atmosphere.Density = .19
+ atmosphere.Color = Color3.fromRGB(184, 226, 255); atmosphere.Decay = Color3.fromRGB(117, 160, 240)
+ if layout then for _, m in ipairs(layout:GetDescendants()) do if m:IsA("BasePart") then m.Transparency = 1; m.CanCollide = false; m.CanTouch = false; m.CanQuery = false end end end
  return W
 end
 return W

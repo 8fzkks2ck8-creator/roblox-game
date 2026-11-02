@@ -82,3 +82,21 @@ check(rewards==1,"duplicate match completion cannot award twice")
 check(B.StartBoss(fighter,"sentinel"),"arena can be reused after victory")
 B.Remove(fighter)
 check(rewards==1 and not B.Active[fighter],"leaving a fight grants no reward")
+
+-- Responsive geometry and large-number formatting use the actual client layout module.
+local L=loadstring(LAYOUT_SOURCE,"ClientLayout")()
+for _,size in ipairs({{390,844},{415,739},{768,1024},{1366,768},{1920,1080},{844,390}}) do
+ local m=L.Measure(size[1],size[2])
+ check(m.Scale>0 and m.Width*m.Scale<=size[1]+.01 and m.Height*m.Scale<=size[2]-50+.01,"canvas fits viewport "..size[1].."x"..size[2])
+ check(m.WindowX>=0 and m.WindowX+740<=m.Width and m.WindowY>=0 and m.WindowY+540<=m.Height,"store fits viewport "..size[1].."x"..size[2])
+end
+check(L.Measure(390,844).Portrait and not L.Measure(1366,768).Portrait,"phone and desktop select distinct layouts")
+check(#L.Number(1000000000)<=6 and L.Number(0)=="0","large strength and currency fit HUD labels")
+-- Check reference-map content and keep native studded surfaces on the main avenue.
+local map=workspace:FindFirstChild("RiftWorld")
+check(map:FindFirstChild("Red avenue")~=nil and map:FindFirstChild("Studded grass")~=nil,"reference map has red avenue and studded grass")
+local arches,trees=0,0
+for _,item in ipairs(map:GetChildren()) do
+ if item.Name=="Rainbow arch" then arches+=1 elseif item.Name=="Block canopy" then trees+=1 end
+end
+check(arches==120 and trees>=40,"rainbow and block-tree scenery are generated")
