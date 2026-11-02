@@ -38,65 +38,65 @@ check(live.Change(q,function(d) d.Coins+=1 end),"save recovers after outage")
 check(saved.Strength==23 and live.Pending[q]==0,"recovery does not double count training")
 live.Train(q,7);live.Close(q)
 check(saved.Strength==30 and saved.Lock==nil,"disconnect persists final strength and releases lease")
--- Map build executes the actual World source twice, checking repeatability.
+-- Actual clicker transactions: pending power is merged before selling or rebirthing.
+local K=loadstring(CLICKER_SOURCE,"Clicker")()
+memory=true
+local clickProfiles=loadstring(PROFILES_SOURCE,"ClickProfiles")()
+local clickPlayer=player(9);check(clickProfiles.Load(clickPlayer),"clicker profile loads with rebirth defaults")
+check(clickProfiles.Cache[clickPlayer].Rebirths==0,"new profile starts at zero rebirths")
+clickProfiles.Train(clickPlayer,100)
+local before=clickProfiles.Cache[clickPlayer].Coins
+local result
+check(clickProfiles.Change(clickPlayer,function(d) result=K.Apply("Sell",d) end),"sale commits through profile transaction")
+check(result.Ok and clickProfiles.Cache[clickPlayer].Coins==before+200 and clickProfiles.Strength(clickPlayer)==0,"sale converts pending power exactly once")
+clickProfiles.Change(clickPlayer,function(d) result=K.Apply("Sell",d) end)
+check(not result.Ok and clickProfiles.Cache[clickPlayer].Coins==before+200,"empty or repeated sale cannot duplicate coins")
+local d=clickProfiles.Cache[clickPlayer]
+d.Coins=0;local oldRebirth=d.Rebirths
+clickProfiles.Change(clickPlayer,function(data) result=K.Apply("Rebirth",data) end)
+check(not result.Ok and clickProfiles.Cache[clickPlayer].Rebirths==oldRebirth,"unaffordable rebirth is rejected")
+clickProfiles.Change(clickPlayer,function(data) data.Coins=C.RebirthCost(data.Rebirths);data.Characters.gojo=3;data.Characters.yamcha=1;data.Equipped="gojo";data.Cosmetics.aura1=1;data.Aura="aura1";data.Codes.TEST=true;data.Tickets=2 end)
+clickProfiles.Train(clickPlayer,25)
+clickProfiles.Change(clickPlayer,function(data) result=K.Apply("Rebirth",data) end)
+d=clickProfiles.Cache[clickPlayer]
+check(result.Ok and d.Coins==0 and d.Strength==0 and d.Rebirths==1 and d.Gems==C.Clicker.RebirthGems,"rebirth resets coins and power and grants its permanent rewards")
+check(d.Characters.gojo==3 and d.Cosmetics.aura1==1 and d.Codes.TEST and d.Tickets==2,"rebirth preserves inventory, auras, codes and tickets")
+check(C.ClickGain("yamcha",1)>C.ClickGain("yamcha",0),"first rebirth improves even a common fighter")
+clickProfiles.Change(clickPlayer,function(data) result=K.Apply("UnequipAll",data) end)
+check(clickProfiles.Cache[clickPlayer].Equipped=="" and clickProfiles.Cache[clickPlayer].Aura=="" and C.ClickGain("",1)>=1,"unequip all keeps baseline clicking available")
+clickProfiles.Change(clickPlayer,function(data) result=K.Apply("EquipBest",data) end)
+check(result.Ok and clickProfiles.Cache[clickPlayer].Equipped=="gojo","equip best selects the strongest owned fighter")
+local coins=clickProfiles.Cache[clickPlayer].Coins
+clickProfiles.Change(clickPlayer,function(data) result=K.Apply("RecycleDuplicates",data) end)
+d=clickProfiles.Cache[clickPlayer]
+check(result.Ok and d.Characters.gojo==1 and d.Characters.yamcha==1 and d.Equipped=="gojo" and d.Coins==coins+2*C.Clicker.RecycleCoins,"recycling keeps every unique fighter and the equipped fighter")
+clickProfiles.Change(clickPlayer,function(data) result=K.Apply("RecycleDuplicates",data) end)
+check(not result.Ok and clickProfiles.Cache[clickPlayer].Coins==d.Coins,"repeated recycling cannot grant extra coins")
+clickProfiles.Change(clickPlayer,function(data) data.Rebirths=C.Clicker.MaxRebirths;data.Coins=1e15;result=K.Apply("Rebirth",data) end)
+check(not result.Ok,"rebirth count is capped")
+-- New map contains six working stations and no battle arenas.
 local W=loadstring(WORLD_SOURCE,"World")()
-W.Build();local first=workspace:FindFirstChild("RiftWorld")
-local count=#first:GetDescendants();check(#W.Arenas==3,"three boss arenas are generated")
-local prompts=0;for _,n in ipairs(first:GetDescendants()) do if n.ClassName=="ProximityPrompt" then prompts+=1 end end
-check(prompts==5,"all five gameplay shrine prompts exist")
-W.Build();check(#workspace:FindFirstChild("RiftWorld"):GetDescendants()==count,"map rebuild replaces previous world without duplicating geometry")
-check(count<900,"map stays below 900 instances (original world: 2746)")
+W.Build();local map=workspace:FindFirstChild("RiftWorld");local count=#map:GetDescendants()
+local prompts=0;local actions={};local arches=0;local noCombat=true
+for _,n in ipairs(map:GetDescendants()) do
+ if n.ClassName=="ProximityPrompt" then prompts+=1;actions[n:GetAttribute("RiftAction")]=true end
+ if n.Name=="Rainbow arch" then arches+=1 end
+ if n.Name:lower():find("arena",1,true) or n.Name:lower():find("boss",1,true) then noCombat=false end
+end
+check(noCombat and W.Arenas==nil,"new map has no boss or arena geometry")
+check(prompts==6 and actions.Sell and actions.Rebirth and actions.Summon and actions.Cosmetics and actions.Shop and actions.Wheel,"all six clicker stations are present")
+check(map:FindFirstChild("Meadow stream")~=nil and map:FindFirstChild("Fountain water")~=nil and map:FindFirstChild("Training court")~=nil,"new map has its own stream, fountain and clicking court")
+check(arches==120,"reference-inspired neon rainbow is generated")
+W.Build();check(#workspace:FindFirstChild("RiftWorld"):GetDescendants()==count,"new map rebuilds without duplicate geometry")
+check(count<900,"new map keeps its geometry budget")
 print("WORLD_JSON:"..encode(export(workspace:FindFirstChild("RiftWorld"))))
 print("LIGHTING_JSON:"..encode(export(lighting)))
-
--- Boss lifecycle regression: actual Combat module with only rendering APIs stubbed.
-local effectCalls=0
-services.Debris={AddItem=function() end}
-local realRequire=require
-require=function(target) if target=="CONFIG" then return C end;return {Animate=function() effectCalls+=1 end,Play=function() effectCalls+=1 end} end
-local chunk=loadstring(COMBAT_SOURCE,"Combat")
-setfenv(chunk,setmetatable({typeof=function(x) if getmetatable(x)==nodeMeta then return "Instance" end;return typeof(x) end},{__index=getfenv()}))
-local B=chunk()
-require=realRequire
-local rewards=0
-local events={}
-B.Init(W,function(_,kind,data) table.insert(events,{kind,data}) end,function() rewards+=1;return true end,function() return {Equipped="yamcha",Aura=""} end,function() return 0 end)
-local fighter=Instance.new("Player",workspace);fighter.UserId=3
-fighter.Character=Instance.new("Model",workspace)
-local humanoid=Instance.new("Humanoid",fighter.Character);humanoid.Health=120;humanoid.MaxHealth=120;humanoid.WalkSpeed=21
-humanoid.Died={Connect=function() return {Disconnect=function() end} end}
-local rigRoot=Instance.new("Part",fighter.Character);rigRoot.Name="HumanoidRootPart";rigRoot.Position=Vector3.new(0,4,28)
-local oldTypeof=typeof
-typeof=function(x) if getmetatable(x)==nodeMeta then return "Instance" end;return oldTypeof(x) end
-check(not B.StartBoss(fighter,"missing"),"unknown boss rejected")
-check(not B.StartBoss(fighter,"oni"),"locked boss rejected below required strength")
-local started,reason=B.StartBoss(fighter,"sentinel");print("BOSS_START",started,reason);check(started,"unlocked boss starts a match")
-local match=B.Active[fighter]
-check(match and match.Arena.Busy and humanoid.MaxHealth==C.Characters[1].Health,"boss reserves arena and applies fighter health")
-check(not B.StartBoss(fighter,"sentinel"),"duplicate boss start rejected")
-B.Finish(match,true,"win")
-check(rewards==1 and not B.Active[fighter] and not match.Arena.Busy,"boss victory rewards once and releases arena")
-check(humanoid.MaxHealth==120 and humanoid.WalkSpeed==21,"boss exit restores original health cap and movement")
-B.Finish(match,true,"win")
-check(rewards==1,"duplicate match completion cannot award twice")
-check(B.StartBoss(fighter,"sentinel"),"arena can be reused after victory")
-B.Remove(fighter)
-check(rewards==1 and not B.Active[fighter],"leaving a fight grants no reward")
-
--- Responsive geometry and large-number formatting use the actual client layout module.
+-- Responsive geometry uses the actual layout module and current modal sizes.
 local L=loadstring(LAYOUT_SOURCE,"ClientLayout")()
 for _,size in ipairs({{390,844},{415,739},{768,1024},{1366,768},{1920,1080},{844,390}}) do
  local m=L.Measure(size[1],size[2])
  check(m.Scale>0 and m.Width*m.Scale<=size[1]+.01 and m.Height*m.Scale<=size[2]-50+.01,"canvas fits viewport "..size[1].."x"..size[2])
- check(m.WindowX>=0 and m.WindowX+740<=m.Width and m.WindowY>=0 and m.WindowY+540<=m.Height,"store fits viewport "..size[1].."x"..size[2])
+ check(m.WindowX>=0 and m.WindowX+m.WindowWidth<=m.Width and m.WindowY+m.WindowHeight<=m.Height,"inventory fits viewport "..size[1].."x"..size[2])
 end
 check(L.Measure(390,844).Portrait and not L.Measure(1366,768).Portrait,"phone and desktop select distinct layouts")
-check(#L.Number(1000000000)<=6 and L.Number(0)=="0","large strength and currency fit HUD labels")
--- Check reference-map content and keep native studded surfaces on the main avenue.
-local map=workspace:FindFirstChild("RiftWorld")
-check(map:FindFirstChild("Red avenue")~=nil and map:FindFirstChild("Studded grass")~=nil,"reference map has red avenue and studded grass")
-local arches,trees=0,0
-for _,item in ipairs(map:GetChildren()) do
- if item.Name=="Rainbow arch" then arches+=1 elseif item.Name=="Block canopy" then trees+=1 end
-end
-check(arches==120 and trees>=40,"rainbow and block-tree scenery are generated")
+check(#L.Number(1000000000)<=6 and L.Number(0)=="0","large power and currency fit HUD labels")

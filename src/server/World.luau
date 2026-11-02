@@ -1,8 +1,7 @@
--- Bright classic simulator plaza, based on the supplied studded garden reference.
-local W = {Arenas = {}}
+-- Rift Meadows: a new clicker garden with waterways, a training court and six service stations.
+local W = {}
 local Lighting = game:GetService("Lighting")
 function W.Build()
- W.Arenas = {}
  local layout = workspace:FindFirstChild("RiftLayout")
  local marker = layout and layout:FindFirstChild("LobbySpawn")
  W.Spawn = marker and marker.CFrame or CFrame.new(0, 5, 40)
@@ -113,7 +112,28 @@ function W.Build()
  kiosk("Cosmetics", "AURA GARDEN", Vector3.new(51, 1, -31), Color3.fromRGB(205, 122, 255), "Cosmetics")
  kiosk("Starter", "RIFT STORE", Vector3.new(-51, 1, 32), gold, "Shop")
  kiosk("Wheel", "DAILY WHEEL", Vector3.new(51, 1, 32), Color3.fromRGB(133, 245, 83), "Wheel")
- kiosk("Bosses", "BOSS CHALLENGES", Vector3.new(0, 1, -75), Color3.fromRGB(255, 101, 158), "Bosses")
+ kiosk("Rebirth", "REBIRTH GATE", Vector3.new(0, 1, -78), Color3.fromRGB(255, 101, 158), "Rebirth")
+ kiosk("Sell", "SELL YOUR POWER", Vector3.new(0, 1, 71), Color3.fromRGB(135, 240, 35), "Sell")
+ -- A shallow stream, stepped bridges and a central fountain make a distinct new hub.
+ for _,x in ipairs({-62,62}) do
+  local water=decor(part("Meadow stream",Vector3.new(96,.25,12),Vector3.new(x,.62,14),Color3.fromRGB(76,211,255),Enum.Material.Glass));water.Transparency=.2
+  for _,z in ipairs({7.5,20.5}) do part("Stream bank",Vector3.new(96,.3,.8),Vector3.new(x,.65,z),white) end
+  part("Garden footbridge",Vector3.new(12,.6,16),Vector3.new(x,1,14),wood)
+  for _,side in ipairs({-1,1}) do part("Bridge railing",Vector3.new(.5,2,16),Vector3.new(x+side*5.5,2,14),white) end
+ end
+ part("Training court border",Vector3.new(38,.3,28),Vector3.new(0,.82,40),white)
+ part("Training court",Vector3.new(35,.35,25),Vector3.new(0,.9,40),Color3.fromRGB(255,111,139))
+ part("Training court center",Vector3.new(16,.1,16),Vector3.new(0,1.1,40),Color3.fromRGB(255,212,76))
+ sign("CLICKING COURT",Vector3.new(-30,9,45),18,white)
+ part("Fountain plaza",Vector3.new(38,.3,25),Vector3.new(0,.87,-53),lavender)
+ part("Fountain rim",Vector3.new(13,1.1,13),Vector3.new(0,1.3,-53),white)
+ local pool=decor(part("Fountain water",Vector3.new(11,.25,11),Vector3.new(0,1.95,-53),Color3.fromRGB(76,211,255),Enum.Material.Glass));pool.Transparency=.25
+ part("Fountain pedestal",Vector3.new(3,4,3),Vector3.new(0,3,-53),lavender)
+ local jewel=decor(part("Rift fountain jewel",Vector3.new(3,3,3),Vector3.new(0,6,-53),Color3.fromRGB(102,241,255),Enum.Material.Neon));jewel:SetAttribute("RiftFloat",true)
+ for _,x in ipairs({-32,32}) do for _,z in ipairs({-54,56}) do
+  part("Flower planter",Vector3.new(9,1.2,5),Vector3.new(x,1,z),white)
+  for j=1,3 do part("Block flower",Vector3.new(1.3,1.6,1.3),Vector3.new(x-4+j*2,2.4,z),j%2==0 and gold or Color3.fromRGB(255,105,180)) end
+ end end
  for _, x in ipairs({-77, 77}) do
   for _, z in ipairs({-62, 0, 62}) do
    part("Garden display trim", Vector3.new(22, .6, 16), Vector3.new(x, .6, z), white)
@@ -137,24 +157,10 @@ function W.Build()
    p.Shape = Enum.PartType.Ball
   end
  end
- sign("ANIME RIFT", Vector3.new(0, 21, -100), 30, white)
+ sign("RIFT MEADOWS", Vector3.new(0, 21, -100), 30, white)
  local spawn = Instance.new("SpawnLocation", world)
  spawn.Name = "SanctuarySpawn"; spawn.Size = Vector3.new(9, .4, 9)
  spawn.CFrame = W.Spawn * CFrame.new(0, -4, 0); spawn.Anchored = true; spawn.Neutral = true; spawn.Transparency = 1; spawn.Duration = 0
- for i = 1, 3 do
-  local markers = layout and layout:FindFirstChild("Arena" .. i)
-  local centerMarker = markers and markers:FindFirstChild("Center")
-  local center = centerMarker and centerMarker.Position or Vector3.new((i - 2) * 155, 0, -240)
-  local p1 = markers and markers:FindFirstChild("Player1"); local p2 = markers and markers:FindFirstChild("Player2")
-  local tint = ({Color3.fromRGB(109, 234, 158), Color3.fromRGB(255, 137, 156), lavender})[i]
-  part("Boss island " .. i, Vector3.new(112, 10, 112), center - Vector3.new(0, 5, 0), earth)
-  part("Arena floor", Vector3.new(104, .3, 104), center, tint)
-  part("Arena center", Vector3.new(30, .1, 30), center + Vector3.new(0, .25, 0), white)
-  for _, dx in ipairs({-53, 53}) do part("Arena wall", Vector3.new(2, 9, 108), center + Vector3.new(dx, 4.5, 0), lavender) end
-  for _, dz in ipairs({-53, 53}) do part("Arena wall", Vector3.new(108, 9, 2), center + Vector3.new(0, 4.5, dz), lavender) end
-  sign("BOSS ARENA " .. i, center + Vector3.new(0, 14, -50), 29, white)
-  W.Arenas[i] = {Center = center, Spawns = {p1 and p1.CFrame or CFrame.new(center + Vector3.new(0, 4, 28)), p2 and p2.CFrame or CFrame.new(center + Vector3.new(0, 4, -28))}}
- end
  Lighting.ClockTime = 13.5; Lighting.Brightness = 2.4
  Lighting.Ambient = Color3.fromRGB(151, 160, 193); Lighting.OutdoorAmbient = Color3.fromRGB(177, 193, 219)
  for _, name in ipairs({"RiftBloom", "RiftAtmosphere"}) do local effect = Lighting:FindFirstChild(name); if effect then effect:Destroy() end end

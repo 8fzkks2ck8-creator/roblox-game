@@ -63,8 +63,14 @@ def build(luau,compiler,output):
     sss=child(root,'ServerScriptService')
     client=child(child(child(root,'StarterPlayer'),'StarterPlayerScripts'),'Client')
     targets=[(client,'src/client/Client.client.luau')]
+    for legacy in list(sss.findall('Item')):
+        if name(legacy)=='Combat': sss.remove(legacy)
     for file in (ROOT/'src/server').glob('*.luau'):
-        label=file.name.replace('.server.luau','').replace('.luau','');targets.append((child(sss,label),str(file.relative_to(ROOT))))
+        label=file.name.replace('.server.luau','').replace('.luau','')
+        try: item=child(sss,label)
+        except StopIteration:
+            item=ET.SubElement(sss,'Item',{'class':'Script' if '.server.' in file.name else 'ModuleScript','referent':'RBX_RIFT_SERVER_'+label});ET.SubElement(item,'Properties');prop(item.find('Properties'),'string','Name',label)
+        targets.append((item,str(file.relative_to(ROOT))))
     for file in (ROOT/'src/shared').glob('*.luau'):
         label=file.stem
         try: item=child(rift,label)
@@ -72,7 +78,12 @@ def build(luau,compiler,output):
             item=ET.SubElement(rift,'Item',{'class':'ModuleScript','referent':'RBX_RIFT_MODULE_'+label});ET.SubElement(item,'Properties');prop(item.find('Properties'),'string','Name',label)
         targets.append((item,str(file.relative_to(ROOT))))
     for item,file in targets: prop(item.find('Properties'),'ProtectedString','Source',(ROOT/file).read_text())
-    workspace=child(root,'Workspace');workspace.remove(child(workspace,'RiftWorld'))
+    workspace=child(root,'Workspace')
+    for old in list(workspace.findall('Item')):
+        if name(old) not in ('Terrain','Camera','RiftLayout'): workspace.remove(old)
+    layout=child(workspace,'RiftLayout')
+    for old in list(layout.findall('Item')):
+        if name(old)!='LobbySpawn': layout.remove(old)
     import itertools
     seq=itertools.count(1);workspace.append(xml_node(world,seq))
     light=child(root,'Lighting');write_props(light.find('Properties'),lighting['props'],'Lighting')
@@ -93,5 +104,5 @@ def build(luau,compiler,output):
     assert ET.tostring(child(rift,'Assets'))==ET.tostring(child(final_rift,'Assets')), 'Imported assets changed'
     print(f'BUILT {output} ({output.stat().st_size:,} bytes); {len(targets)} script sources verified')
 if __name__=='__main__':
-    p=argparse.ArgumentParser();p.add_argument('--luau',default='luau');p.add_argument('--compiler',default='luau-compile');p.add_argument('--output',type=pathlib.Path,default=ROOT/'AnimeRift_Polished.rbxlx');a=p.parse_args()
+    p=argparse.ArgumentParser();p.add_argument('--luau',default='luau');p.add_argument('--compiler',default='luau-compile');p.add_argument('--output',type=pathlib.Path,default=ROOT/'AnimeRift_Clicker.rbxlx');a=p.parse_args()
     build(a.luau,a.compiler,a.output)

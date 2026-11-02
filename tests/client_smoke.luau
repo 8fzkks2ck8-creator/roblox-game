@@ -84,6 +84,7 @@ local playerGui=Instance.new("PlayerGui",user);playerGui.Name="PlayerGui"
 services.Players={LocalPlayer=user}
 services.ReplicatedStorage=rs
 services.SoundService=Instance.new("SoundService")
+services.Debris={AddItem=function() end}
 services.TweenService={Create=function(_,instance,info,props) return {Play=function() for key,value in pairs(props) do instance[key]=value end end,Cancel=function() end} end}
 services.UserInputService={InputBegan=signal(),GetFocusedTextBox=function() return nil end}
 services.ProximityPromptService={PromptShown=signal(),PromptHidden=signal()}
@@ -97,7 +98,7 @@ end
 loadstring(CLIENT_SOURCE,"Client")()
 local ui=playerGui:FindFirstChild("AnimeRiftUI");check(ui~=nil,"client builds the UI on a portrait phone")
 local canvas=ui:FindFirstChildOfClass("Frame")
-local data={ServerTime=os.time(),Coins=1000,Gems=0,Wins=0,Strength=0,BossDamage=10,ClickGain=1,Characters={yamcha=1},Cosmetics={},Equipped="yamcha",Aura="",LuckUntil=0,WheelReady=true,Studio=true,PaidAllowed=true}
+local data={ServerTime=os.time(),Coins=1000,Gems=0,Wins=0,Strength=0,SellValue=0,Rebirths=0,RebirthCost=C.RebirthCost(0),ClickGain=1,Characters={yamcha=1},Cosmetics={},Equipped="yamcha",Aura="",LuckUntil=0,WheelReady=true,Studio=true,PaidAllowed=true}
 events.OnClientEvent:Fire("State",data)
 local function findButton(text,parent)
  for _,item in ipairs((parent or canvas):GetDescendants()) do
@@ -105,22 +106,37 @@ local function findButton(text,parent)
  end
  error("Missing button: "..text)
 end
-findButton("STORE").Activated:Fire()
+findButton("SHOP").Activated:Fire()
 local backdrop=canvas:FindFirstChild("ModalBackdrop")
 check(backdrop.Visible,"store opens its modal backdrop")
 local cards=0
-for _,item in ipairs(canvas:GetDescendants()) do if item:IsA("TextButton") and item:FindFirstChild("Label") and (item.Label.Text=="VIEW PACK" or item.Label.Text=="SELECTED") and item.Size.X.Offset==172 then cards+=1 end end
+for _,item in ipairs(canvas:GetDescendants()) do if item:IsA("TextButton") and item:FindFirstChild("Label") and (item.Label.Text=="VIEW PACK" or item.Label.Text=="SELECTED") and item.Size.X.Offset>150 and item.Size.X.Offset<500 then cards+=1 end end
 check(cards==4,"store creates all four compact product cards")
-findButton("Fighters").Activated:Fire()
-check(findButton("EQUIPPED")~=nil,"fighter tab renders owned fighter and equip button")
+findButton("FIGHTERS").Activated:Fire()
+check(findButton("Equipped")~=nil,"fighter tab renders owned fighter and equip button")
 findButton("X").Activated:Fire()
-findButton("STORE").Activated:Fire()
+findButton("SHOP").Activated:Fire()
 for _,delay in ipairs(delays) do if delay.Seconds==.13 then delay.Fn() end end
 check(backdrop.Visible,"reopening a menu cancels a pending close animation")
-events.OnClientEvent:Fire("MatchStart",{Opponent="Sentinel",Countdown=3,Duration=180})
-check(not backdrop.Visible,"boss start clears the backdrop immediately")
-events.OnClientEvent:Fire("MatchEnd","Returned to lobby")
 workspace.CurrentCamera.ViewportSize=Vector2.new(1366,768)
 check(canvas.Size.X.Offset==1200 and canvas.Size.Y.Offset==760,"live resize switches portrait UI to desktop layout")
 workspace.CurrentCamera.ViewportSize=Vector2.new(390,844)
 check(canvas.Size.X.Offset==760 and canvas.Size.Y.Offset==1200,"live resize restores the portrait layout")
+
+findButton("FIGHTERS").Activated:Fire()
+local searchBox
+for _,item in ipairs(canvas:GetDescendants()) do if item.Name=="InventorySearch" then searchBox=item end end
+searchBox.Text="no such fighter"
+local noResults=false
+for _,item in ipairs(canvas:GetDescendants()) do if item:IsA("TextLabel") and item.Text=="No fighters match your search." then noResults=true end end
+check(noResults,"inventory search filters immediately without closing the search field")
+searchBox.Text="yamcha"
+check(findButton("Equipped")~=nil,"inventory search restores matching owned fighters")
+searchBox.Text=""
+findButton("SELL").Activated:Fire()
+check(findButton("SELL ALL POWER")~=nil,"sell menu replaces boss controls")
+findButton("REBIRTH").Activated:Fire()
+check(findButton("REBIRTH • "..L.Number(data.RebirthCost).." COINS")~=nil,"rebirth menu shows its actual cost")
+local noBossButtons=true
+for _,item in ipairs(canvas:GetDescendants()) do if item:IsA("TextLabel") and type(item.Text)=="string" and (item.Text:find("BOSS",1,true) or item.Text:find("GUARD",1,true)) then noBossButtons=false end end
+check(noBossButtons,"client builds no boss or guard controls")

@@ -12,7 +12,8 @@ remote.OnServerInvoke=function() return {Ok=false,Loading=true,Message="Server i
 local function boot()
 local P=require(script.Parent.Profiles)
 local W=require(script.Parent.World).Build()
-local B=require(script.Parent.Combat)
+local A=require(script.Parent.Avatars)
+local Clicker=require(script.Parent.Clicker)
 local Admin=require(script.Parent.Admin)
 local policies,limits,working,training={},{},{},{}
 local rng=Random.new()
@@ -21,7 +22,7 @@ local function allowed(p) return policies[p]==true or (Run:IsStudio() and C.Stud
 local function lucky(p,d) return allowed(p) and d.LuckUntil>os.time() end
 local function state(p)
  local d=P.Cache[p]; if not d then return nil end
- return {Strength=P.Strength(p),ClickGain=C.ClickGain(d.Equipped),BossDamage=C.BossDamage(d.Equipped,P.Strength(p),d.Aura),Coins=d.Coins,Gems=d.Gems,Tickets=d.Tickets,Boosted=d.Boosted,Characters=d.Characters,Cosmetics=d.Cosmetics,Equipped=d.Equipped,Aura=d.Aura,Wins=d.Wins,LuckUntil=d.LuckUntil,Lucky=lucky(p,d),PaidAllowed=allowed(p),WheelReady=d.WheelDay<math.floor(os.time()/86400),Queued=B.InQueue(p),InMatch=B.Active[p]~=nil,ServerTime=os.time(),Studio=Run:IsStudio(),IsOwner=Admin.IsOwner(p),IsAdmin=Admin.Allowed(p)}
+ return {Strength=P.Strength(p),ClickGain=C.ClickGain(d.Equipped,d.Rebirths,d.Aura),SellValue=P.Strength(p)*C.Clicker.SellRate,Rebirths=d.Rebirths,RebirthCost=C.RebirthCost(d.Rebirths),Coins=d.Coins,Gems=d.Gems,Tickets=d.Tickets,Boosted=d.Boosted,Characters=d.Characters,Cosmetics=d.Cosmetics,Equipped=d.Equipped,Aura=d.Aura,Wins=d.Wins,LuckUntil=d.LuckUntil,Lucky=lucky(p,d),PaidAllowed=allowed(p),WheelReady=d.WheelDay<math.floor(os.time()/86400),ServerTime=os.time(),Studio=Run:IsStudio(),IsOwner=Admin.IsOwner(p),IsAdmin=Admin.Allowed(p)}
 end
 local function sync(p) send(p,"State",state(p)) end
 local function edit(p,fn)
@@ -29,22 +30,14 @@ local function edit(p,fn)
  if not ok then return false,"Could not save. Please try again." end
  sync(p); return true
 end
-local function reward(p,boss)
- local ok=edit(p,function(d) d.Gems=d.Gems+C.Economy.GemsPerWin; d.Coins=d.Coins+(boss and boss.Coins or C.Economy.CoinsPerWin); d.Wins=d.Wins+1 end)
- if not ok then send(p,"Toast","Win reward could not save. Please rejoin if data remains unavailable.") end
- return ok
-end
-B.Init(W,send,reward,function(p) return P.Cache[p] end,function(p) return P.Strength(p) end)
+A.Init(function(p) return P.Cache[p] end)
 local function onCharacter(p,m)
  local root=m:WaitForChild("HumanoidRootPart",10); if not root or p.Character~=m or not P.Ready[p] then return end
- if B.Active[p] then B.Remove(p) end
  if not m:GetAttribute("RiftCharacterId") then m:PivotTo(W.Spawn) end
  task.wait(0.2); if p.Character~=m or not m.Parent then return end
- B.Decorate(p)
+ A.Decorate(p)
  if p.Character~=m then return end
- local h=m:FindFirstChildOfClass("Humanoid"); if h then
-  h.Died:Connect(function() if B.InQueue(p) then B.Remove(p); sync(p) end end)
- end
+
 end
 local function join(p)
  -- Load free inventory independently of the external policy request.
@@ -53,7 +46,7 @@ local function join(p)
  if not P.Load(p) then return end
  if not p.Parent then P.Close(p); policies[p]=nil; return end
  p.CharacterAdded:Connect(function(m) onCharacter(p,m) end)
- p.CharacterAppearanceLoaded:Connect(function(character) if P.Ready[p] and p.Character==character then B.Decorate(p) end end)
+ p.CharacterAppearanceLoaded:Connect(function(character) if P.Ready[p] and p.Character==character then A.Decorate(p) end end)
  if p.Character then task.spawn(onCharacter,p,p.Character) end
  sync(p)
  if not Run:IsStudio() then task.spawn(function()
@@ -65,13 +58,11 @@ local function join(p)
 end
 Players.PlayerAdded:Connect(join)
 for _,p in ipairs(Players:GetPlayers()) do task.spawn(join,p) end
-Players.PlayerRemoving:Connect(function(p) B.Remove(p); P.Close(p); policies[p]=nil; limits[p]=nil; working[p]=nil;training[p]=nil; Admin.Last[p.UserId]=nil end)
+Players.PlayerRemoving:Connect(function(p) P.Close(p); policies[p]=nil; limits[p]=nil; working[p]=nil;training[p]=nil; Admin.Last[p.UserId]=nil end)
 local function handle(p,action,arg)
  local d=P.Cache[p]
  if action=="State" then return {Ok=true,State=state(p)} end
  if P.Closing[p] then return {Ok=false,Message="Your progress is being saved."} end
- if B.Settling and B.Settling[p] then return {Ok=false,Message="Saving your boss reward. Please wait."} end
- if action=="Admin" and B.Active[p] then return {Ok=false,Message="Return to the lobby before using owner commands."} end
  if action=="Admin" then return Admin.Execute(p,arg,P,sync,send) end
  if action=="Train" then
   local now=os.clock()
@@ -79,16 +70,18 @@ local function handle(p,action,arg)
   local h=p.Character and p.Character:FindFirstChildOfClass("Humanoid")
   if not h or h.Health<=0 then return {Ok=false,Message="Wait for your character to spawn."} end
   training[p]=now
-  local gain=P.Train(p,C.ClickGain(d.Equipped))
-  B.Attack(p,"M1")
-  send(p,"Training",{Gain=gain,Strength=P.Strength(p),ClickGain=C.ClickGain(d.Equipped),Damage=C.BossDamage(d.Equipped,P.Strength(p),d.Aura)})
+  local gain=P.Train(p,C.ClickGain(d.Equipped,d.Rebirths,d.Aura))
+  send(p,"Training",{Gain=gain,Strength=P.Strength(p),ClickGain=C.ClickGain(d.Equipped,d.Rebirths,d.Aura),SellValue=P.Strength(p)*C.Clicker.SellRate})
   return {Ok=true}
  end
- if action=="LeaveBoss" then B.Remove(p);sync(p);return {Ok=true} end
- if action=="Attack" then B.Attack(p,arg); return {Ok=true} end
- if B.Active[p] then return {Ok=false,Message="Finish your boss fight first."} end
- if action=="Boss" then local ok,msg=B.StartBoss(p,arg);return {Ok=ok,Message=msg} end
- if action=="Queue" or action=="Practice" then send(p,"OpenMenu","Bosses");return {Ok=true} end
+ if Clicker.Actions[action] then
+  local result
+  local ok,err=edit(p,function(data) result=Clicker.Apply(action,data,arg) end)
+  if not ok then return {Ok=false,Message=err} end
+  if result.Ok and (action=="EquipBest" or action=="UnequipAll") then A.Decorate(p) end
+  if result.Ok and (action=="Sell" or action=="Rebirth") then send(p,"ClickerReward",{Kind=action,Amount=result.Amount or 0}) end
+  return result
+ end
  if action=="PreviewProduct" then
   if not Run:IsStudio() or not C.StudioMemory then return {Ok=false,Message="Pack previews only work in Studio test mode."} end
   local product=C.Products[arg]
@@ -102,11 +95,10 @@ local function handle(p,action,arg)
  if action=="Purchase" then
   local product=C.Products[arg]
   if not product then return {Ok=false,Message="Unknown product."} end
-  if not allowed(p) then return {Ok=false,Message="Paid random rewards are unavailable for this account. Earn coins and gems from bosses."} end
+  if not allowed(p) then return {Ok=false,Message="Paid random rewards are unavailable for this account. Sell power and rebirth to earn coins and gems."} end
   if Run:IsStudio() or product.Id==0 then return {Ok=false,Message="Purchase not enabled. Configure product IDs and test in a published experience."} end
   return {Ok=true,ProductId=product.Id}
  end
- if B.InQueue(p) then return {Ok=false,Message="Leave the queue before changing your loadout or spinning."} end
  if action=="Spin" then
   if arg~="Coins" and arg~="Ticket" and arg~="Boosted" then return {Ok=false,Message="Invalid spin."} end
   if arg~="Coins" and not allowed(p) then return {Ok=false,Message="Ticket rolls unavailable. Use earned coins for a free-path roll."} end
@@ -136,11 +128,11 @@ local function handle(p,action,arg)
   send(p,"Reveal",{Kind="Cosmetic",Id=item.Id}); return {Ok=true}
  elseif action=="Equip" then
   if not C.Find(C.Characters,arg) or not d.Characters[arg] then return {Ok=false,Message="Character not owned."} end
-  local ok,err=edit(p,function(data) data.Equipped=arg end); if ok then B.Decorate(p) end
+  local ok,err=edit(p,function(data) data.Equipped=arg end); if ok then A.Decorate(p) end
   return {Ok=ok,Message=err or "Character equipped!"}
  elseif action=="Aura" then
   if arg~="" and (not C.Find(C.Cosmetics,arg) or not d.Cosmetics[arg]) then return {Ok=false,Message="Cosmetic not owned."} end
-  local ok,err=edit(p,function(data) data.Aura=arg end); if ok then B.Decorate(p) end
+  local ok,err=edit(p,function(data) data.Aura=arg end); if ok then A.Decorate(p) end
   return {Ok=ok,Message=err or "Cosmetic equipped!"}
  elseif action=="Code" then
   local code=string.upper((arg or ""):gsub("%s+","")); local gift=C.Codes[code]
@@ -171,8 +163,8 @@ remote.OnServerInvoke=function(p,action,arg)
  local now=os.clock(); local l=limits[p] or {At=now,Count=0}; limits[p]=l
  if now-l.At>=1 then l.At=now; l.Count=0 end
  l.Count=l.Count+1; if l.Count>15 then return {Ok=false} end
- if working[p] and action~="LeaveBoss" then return {Ok=false,Message="One moment..."} end
- local ownsWork=action~="LeaveBoss"
+ if working[p] then return {Ok=false,Message="One moment..."} end
+ local ownsWork=true
  if ownsWork then working[p]=true end
  local ok,result=pcall(handle,p,action,arg)
  if ownsWork then working[p]=nil end
@@ -203,9 +195,7 @@ game:GetService("ProximityPromptService").PromptTriggered:Connect(function(promp
  local world=workspace:FindFirstChild("RiftWorld")
  if not world or not prompt:IsDescendantOf(world) then return end
  local name=prompt:GetAttribute("RiftAction")
- if name=="Queue" or name=="Bosses" then
-  if P.Ready[p] then send(p,"OpenMenu","Bosses") end
- elseif name=="Shop" or name=="Summon" or name=="Cosmetics" or name=="Wheel" then
+ if P.Ready[p] and (name=="Shop" or name=="Summon" or name=="Cosmetics" or name=="Wheel" or name=="Sell" or name=="Rebirth") then
   send(p,"OpenMenu",name)
  end
 end)

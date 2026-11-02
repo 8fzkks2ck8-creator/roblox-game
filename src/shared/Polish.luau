@@ -26,19 +26,6 @@ local function ambience(world)
 end
 workspace.ChildAdded:Connect(function(child) if child.Name=="RiftWorld" then task.defer(ambience,child) end end)
 local current=workspace:FindFirstChild("RiftWorld");if current then ambience(current) end
-local guard
-local guardSerial=0
-function P.ClearGuard()
- guardSerial+=1;if guard then guard:Destroy();guard=nil end
-end
-function P.Guard(character,duration)
- P.ClearGuard();local serial=guardSerial
- local root=character and character:FindFirstChild("HumanoidRootPart");if not root then return end
- local shield=Instance.new("Part");shield.Name="LocalGuardShell";shield.Shape=Enum.PartType.Ball;shield.Size=Vector3.new(7,8,7);shield.CFrame=root.CFrame;shield.Material=Enum.Material.ForceField;shield.Color=Color3.fromRGB(130,230,255);shield.Transparency=.45;shield.CanCollide=false;shield.CanTouch=false;shield.CanQuery=false;shield.Massless=true;shield.Parent=character
- local weld=Instance.new("WeldConstraint",shield);weld.Part0=root;weld.Part1=shield;guard=shield
- Tween:Create(shield,TweenInfo.new(duration),{Transparency=.95}):Play()
- task.delay(duration,function() if guardSerial==serial then P.ClearGuard() end end)
-end
 local auraCharacter,auraId
 function P.Aura(character,id)
  if not character then return end

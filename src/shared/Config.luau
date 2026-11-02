@@ -16,37 +16,37 @@ C.Icons = {Shop="",Summon="",Inventory="",Cosmetics="",Wheel="",Codes="rbxasseti
 C.StudioMemory = true -- Studio uses disposable test data; live servers always persist.
 C.DataStore = "AnimeRift_v1"
 C.SpinCost = 250
-C.Economy={StartingCoins=1000,CoinsPerWin=250,GemsPerWin=10,CosmeticStandard=30,CosmeticBoosted=100,CharacterDuplicate=50,CosmeticDuplicate=5}
+C.Economy={StartingCoins=1000,CosmeticStandard=30,CosmeticBoosted=100,CharacterDuplicate=50,CosmeticDuplicate=5}
 C.Rarities = {"Common", "Uncommon", "Rare", "Legendary", "Mythic", "Secret", "Super Secret"}
-C.Colors = {Color3.fromRGB(163,180,200), Color3.fromRGB(90,226,166), Color3.fromRGB(82,172,255), Color3.fromRGB(255,195,77), Color3.fromRGB(221,112,255), Color3.fromRGB(255,92,130), Color3.fromRGB(100,255,238)}
+C.Colors = {Color3.fromRGB(255,220,65), Color3.fromRGB(135,240,35), Color3.fromRGB(42,222,245), Color3.fromRGB(255,139,52), Color3.fromRGB(229,64,248), Color3.fromRGB(255,92,130), Color3.fromRGB(100,255,238)}
 C.BaseOdds = {60,30,8,1.8,0.19,0.01,0.001}
 C.Characters = {}
-local function hero(id,name,tier,style,q,e,r)
+local function hero(id,name,tier)
  local i = #C.Characters+1
- C.Characters[i] = {Id=id,Name=name,Tier=tier,Style=style,Skills={q,e,r},Health=100+(tier-1)*3,Damage=1+(tier-1)*0.035,Color=C.Colors[tier]}
+ C.Characters[i] = {Id=id,Name=name,Tier=tier,Color=C.Colors[tier]}
 end
-hero("yamcha","Yamcha",1,"dash","Spirit Ball","Wolf Rush","Wolf Fang")
-hero("krillin","Krillin",1,"guard","Destructo Disc","Solar Guard","Scatter Energy")
-hero("lee","Rock Lee",2,"dash","Leaf Strike","Leaf Sprint","Lotus Burst")
-hero("renji","Renji Abarai",2,"dash","Zabimaru Lash","Flash Step","Serpent Burst")
-hero("rukia","Rukia Kuchiki",3,"guard","Frost Lance","Ice Guard","White Moon")
-hero("piccolo","Piccolo",3,"guard","Special Beam","Namek Guard","Hellzone Burst")
-hero("kakashi","Kakashi Hatake",4,"dash","Lightning Blade","Substitution","Lightning Field")
-hero("byakuya","Byakuya Kuchiki",4,"guard","Petal Lance","Petal Guard","Senbonzakura")
-hero("naruto","Naruto (Sage Mode)",6,"dash","Rasenshuriken","Sage Rush","Rasengan Storm")
-hero("vegeta","Vegeta (Super Saiyan Blue)",5,"guard","Final Flash","Saiyan Guard","Big Bang Burst")
-hero("aizen","Sosuke Aizen",6,"blink","Black Coffin","Mirror Step","Spiritual Collapse")
-hero("ui_goku","Goku (Ultra Instinct)",6,"blink","Kamehameha","Instinct Step","Silver Nova")
-hero("sasuke","Sasuke Uchiha",4,"dash","Chidori","Shadow Step","Amaterasu Burst")
+hero("yamcha","Yamcha",1)
+hero("krillin","Krillin",1)
+hero("lee","Rock Lee",2)
+hero("renji","Renji Abarai",2)
+hero("rukia","Rukia Kuchiki",3)
+hero("piccolo","Piccolo",3)
+hero("kakashi","Kakashi Hatake",4)
+hero("byakuya","Byakuya Kuchiki",4)
+hero("naruto","Naruto (Sage Mode)",6)
+hero("vegeta","Vegeta (Super Saiyan Blue)",5)
+hero("aizen","Sosuke Aizen",6)
+hero("ui_goku","Goku (Ultra Instinct)",6)
+hero("sasuke","Sasuke Uchiha",4)
 C.Characters[#C.Characters].Rollable=false -- guaranteed Starter pack exclusive
-hero("ichigo","Ichigo Kurosaki",5,"dash","Getsuga Tensho","Flash Step","Bankai Burst")
-hero("sukuna","Ryomen Sukuna",5,"dash","Dismantle","Cursed Rush","Malevolent Shrine")
-hero("gojo","Satoru Gojo",5,"guard","Hollow Purple","Infinity Guard","Unlimited Void")
-hero("cid","Cid Kagenou",6,"blink","Shadow Lance","Shadow Step","I Am Atomic")
-hero("marlon","Marlon",7,"blink","Rift Spear","Phantom Step","Sovereign Nova")
-hero("madara","Madara Uchiha",6,"guard","Majestic Flame","Susanoo Guard","Shattered Heaven")
-hero("asta","Asta",5,"dash","Demon Slayer","Black Rush","Black Divider")
-hero("gear5_luffy","Luffy (Gear 5)",6,"blink","Dawn Whip","Cloud Step","Bajrang Gun")
+hero("ichigo","Ichigo Kurosaki",5)
+hero("sukuna","Ryomen Sukuna",5)
+hero("gojo","Satoru Gojo",5)
+hero("cid","Cid Kagenou",6)
+hero("marlon","Marlon",7)
+hero("madara","Madara Uchiha",6)
+hero("asta","Asta",5)
+hero("gear5_luffy","Luffy (Gear 5)",6)
 -- Original block-built prototype outfits (no imported anime meshes or art).
 C.Outfits = {
  madara={Skin={239,198,171},Cloth={154,46,48},Hair={25,24,35}},
@@ -73,7 +73,7 @@ C.Outfits = {
 }
 C.Cosmetics = {}
 for tier,name in ipairs({"Ember Band","Jade Orbit","Azure Halo","Solar Crown","Void Wings","Celestial Eclipse"}) do
- table.insert(C.Cosmetics,{Id="aura"..tier,Name=name,Tier=tier,Damage=tier*0.005,Defense=tier*0.005,Color=C.Colors[tier]})
+ table.insert(C.Cosmetics,{Id="aura"..tier,Name=name,Tier=tier,Power=tier*.1,Color=C.Colors[tier]})
 end
 -- Each purchase provides deterministic credits. One boosted credit = one character.
 -- Set real Developer Product IDs from YOUR experience. Prices come from Roblox.
@@ -96,23 +96,18 @@ function C.WheelLayout()
  assert(total==100,"Wheel weights must total 100")
  return slots
 end
--- Boss clicker balance: edit these values to tune progression.
-C.Training={Interval=0.16,MaxStrength=1000000000,Clicks={1,2,4,8,16,32,64},Damage={1,1.3,1.8,2.5,3.5,5,8}}
-C.Bosses={
- {Id="sentinel",Name="Rift Sentinel",Health=450,Damage=14,Coins=150,Required=0,Color=Color3.fromRGB(80,220,170)},
- {Id="oni",Name="Crimson Oni",Health=3000,Damage=22,Coins=750,Required=100,Color=Color3.fromRGB(255,75,110)},
- {Id="sovereign",Name="Void Sovereign",Health=18000,Damage=32,Coins=3500,Required=1000,Color=Color3.fromRGB(180,75,255)},
-}
-function C.ClickGain(id)
- local hero=C.Find(C.Characters,id) or C.Characters[1]
- return C.Training.Clicks[hero.Tier]
-end
-function C.BossDamage(id,strength,auraId)
- local hero=C.Find(C.Characters,id) or C.Characters[1]
+-- Power is banked by clicking, then sold for coins. Rebirths retain collectibles.
+C.Training={Interval=0.16,MaxStrength=1000000000,Clicks={1,2,4,8,16,32,64}}
+C.Clicker={SellRate=2,RebirthBaseCost=2500,RebirthGems=25,RebirthBonus=.5,MaxRebirths=10000,RecycleCoins=25}
+function C.ClickGain(id,rebirths,auraId)
+ local hero=C.Find(C.Characters,id)
+ local base=hero and C.Training.Clicks[hero.Tier] or 1
  local aura=C.Find(C.Cosmetics,auraId)
- return math.floor((10+math.max(0,strength or 0)*0.12)*C.Training.Damage[hero.Tier]*(1+(aura and aura.Damage or 0)))
+ return math.max(1,math.ceil(base*(1+math.max(0,rebirths or 0)*C.Clicker.RebirthBonus)*(1+(aura and aura.Power or 0))))
 end
-C.Cooldowns={M1=0.6,Q=5,E=8,R=16}
+function C.RebirthCost(rebirths)
+ return C.Clicker.RebirthBaseCost*(math.max(0,rebirths or 0)+1)^2
+end
 function C.Find(list,id) for _,v in ipairs(list) do if v.Id==id then return v end end end
 function C.Odds(boosted,luck,list)
  local o=table.clone(C.BaseOdds)

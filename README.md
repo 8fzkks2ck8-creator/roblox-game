@@ -1,51 +1,54 @@
-# Anime Rift — Rainbow Plaza
+# Anime Rift Clicker — Rift Meadows
 
-Open **AnimeRift_Polished.rbxl** (standard binary place), or **AnimeRift_Polished.rbxlx** in Roblox Studio and press **Play (F5)**. The original uploaded place is preserved in `assets/AnimeRift.original.rbxlx`.
+Download **AnimeRift_Clicker.rbxl**, open it in **Roblox Studio → File → Open from File**, and press **Play (F5)**. This version replaces the previous boss game. The original upload remains untouched in `assets/AnimeRift.original.rbxlx`, and earlier builds are available in Git history.
 
-This version keeps the original fighters, rigs, sounds, summon economy, product settings, inventory, daily wheel, boss progression, and save-store name. This version follows your supplied references: a bright classic studded garden and a colorful simulator store UI.
+## Play loop
 
-Changes:
-- Cyan checker headers, dark outlines and white inset borders, rounded colorful buttons, and two-column store/fighter cards. The store's four pack cards fit above the detail section; product purchases still use your configured IDs.
-- Separate portrait-phone and desktop layouts, centered notifications, compact number formatting, animated currency counters, health and next-boss progress bars, and animated menu transitions. No fake XP levels were added.
-- Lime studded grass, a red avenue, white borders, lavender display platforms and signs, block trees, stepped cliffs, fences, lanterns, cloud clusters, and a five-band neon rainbow. Existing arena/spawn markers and all five gameplay kiosks remain usable.
-- Local fireflies, aura sparkles, training ripples and hand sparks, skill effects, a three-second guard shell with a matching countdown, and victory confetti. Existing custom effects and animations take precedence.
-- Duplicate animation scripts are removed when importing a playable character clone. Decorative hair and aura pieces no longer participate in touch detection.
-- Pending menu-close animations cannot hide a newly opened menu. The boss backdrop clears immediately. Resizing and camera changes reuse a single viewport listener. Notifications fit portrait screens; large coin and strength values fit their labels.
-- Existing profile fixes remain: closing blocks external mutations, failed writes retain pending training, and boss completion releases arenas and restores the previous health cap and movement speed.
+1. Click/tap the world or use **Click + Power** to bank power. **F** also clicks when no menu or text box is active.
+2. Open **Sell** to convert banked power to coins, at two coins per power.
+3. Spend coins on summons and equip stronger fighters to increase power per click.
+4. Save enough coins to **Rebirth**: this resets all coins and banked power, grants 25 gems and a permanent +50% base-power multiplier. The first cost is 2,500 coins; subsequent costs scale with `(rebirths + 1)^2`. Gains round up, so the first rebirth helps common fighters too.
+5. Use gems for auras, which now boost click power. Existing fighter/aura ownership, tickets, redeemed codes, luck time and purchased rewards are retained when rebirthing.
 
-## Editing and rebuilding
+There are no boss arenas, combat skills, boss rewards, combat HUD, or accepted boss/attack requests. Existing saved strength becomes banked clicker power; old wins remain archived in save data but are not shown or used. The DataStore name is unchanged.
 
-`src/client` contains the main UI. `src/server` contains profiles, map generation, combat, and server requests. `src/shared` contains configuration, effects, and client-only polish. Edit these files, then rebuild to update the place; rebuilding always starts from the preserved original asset file.
+## Inventory and map
 
-Requires Python 3 and the official Luau CLI/compiler. In the prepared cloud workspace:
+The inventory follows the latest reference: orange studded header, charcoal panels, rarity-colored cards, and individual equip buttons. **Equip Best** picks your strongest owned fighter; **Unequip All** returns to baseline clicking. Search matches names or rarities and keeps keyboard focus while filtering. **Recycle** needs a second confirmation click within eight seconds and only sells extra copies for 25 coins each; it retains one of every fighter, including the equipped fighter. The grid uses five columns on desktop and three on portrait phones.
+
+**Rift Meadows** is a new map inspired by the earlier garden photo, with red studded paths, lime lawns, block trees, a rainbow, a stream and footbridges, a fountain, flower planters, and a clicking court. Six stations open Sell, Rebirth, Summon, Auras, Store and Daily Wheel. Native stud surfaces and a limited number of raised avenue studs keep geometry modest. Old arena markers and loose props from the previous map are omitted from active exports. The original imported character models and summon sounds remain preserved.
+
+Animations and effects include button bounce, menu transitions, reward counters, floating power text, training hand sparks/ripples, local ambient fireflies, aura particles and rebirth confetti. Character clones remove duplicate Animate scripts. No uploaded image is required for the inventory's stud pattern.
+
+## Develop and rebuild
+
+Use the existing isolated checkout; no additional Git worktree is needed. Source files live in `src/client`, `src/server` and `src/shared`. `Clicker.luau` contains server economy mutations, `Avatars.luau` handles outfits/rig swaps, and `World.luau` builds the map.
+
+Requires Python 3, the official Luau CLI/compiler, and Lune 0.11.1 for binary conversion. In the prepared cloud environment:
 
 ```sh
 cd /workspace/roblox-game
 python3 tools/build_place.py \
   --luau /workspace/scratch/luau-toolchain/luau \
   --compiler /workspace/scratch/luau-toolchain/luau-compile
+/workspace/scratch/lune-bin/lune run tools/convert_place.luau
 ```
 
-On other machines, put `luau` and `luau-compile` on PATH and run `python3 tools/build_place.py`. This command compiles the edited scripts, runs the regression tests, serializes a static map preview, injects the scripts into the original place, and verifies the exported sources and preserved asset subtree. `World.Build` recreates the map and its runtime attributes when Play begins. Use the existing checkout; no additional Git worktree is needed.
+On another machine, place `luau`, `luau-compile`, and `lune` on PATH, then run `python3 tools/build_place.py` and `lune run tools/convert_place.luau`. The converter also accepts explicit input/output paths. Rebuilding starts from the preserved original asset file, injects the current modules, removes the retired combat module/arena props, and serializes an edit-view map. World.Build recreates runtime attributes when Play begins. Rebuilding the XML alone does not refresh the binary; run both commands.
 
-Run checks without rebuilding:
+Checks without rebuilding:
 
 ```sh
 python3 tools/validate.py --luau /path/to/luau --compiler /path/to/luau-compile
 ```
 
-## Validation and Studio checks
+92 automated checks pass. The suite executes the actual config, profiles, economy, map, layout, client UI and server request/receipt code with deterministic engine stand-ins. It checks odds, pending-power sales, repeated-sale/recycle protection, rebirth costs/resets/preserved collectibles, unequipped baseline power, ownership validation, profile closing, failed-save recovery, purchase receipt replay, rejection of legacy combat actions, map repeatability, six stations, six viewport sizes, search and menu wiring. The simulated DataStore outage warning is intentional. Binary conversion decodes its output again and verifies instance and script counts/sources.
 
-68 deterministic checks passed in the Luau CLI, using the actual config, profile, combat, world, layout, and client UI source with small engine stand-ins. These cover reward pools, wheel weighting, pending training, failed-write recovery, disconnect persistence, boss admission, single reward delivery, arena release/reuse, health restoration, all five shrine prompts, repeatable map generation, layout bounds at six viewport sizes, store and fighter-tab construction, rapid menu reopen, boss backdrop cleanup, and live resizing. The simulated save-outage warning is intentional. All edited scripts compile.
+## Before publishing
 
-These checks do **not** validate Studio rendering, real DataStore access, replication, physics, uploaded animation/audio permissions, or real purchases. Before publishing, test:
+Roblox Studio cannot run in this Linux workspace. Automated checks do not validate actual rendering, physics, touch hit testing, rig replication, audio/animation permissions, or live Roblox services.
 
-1. Play solo: walk to each shrine, summon, reveal, equip, train, and spin the daily wheel. Confirm the custom summon sounds are authorized for your experience.
-2. Boss fight: the menu backdrop disappears immediately; clicking and Q/E/R work; losing, leaving, and winning return you to the lobby. The same arena can be reused.
-3. Studio Server & Clients with two players: simultaneous equips and boss fights, then disconnect/rejoin. Test the smallest desktop viewport and the phone/tablet emulator, including text entry and touch movement.
-4. A private published test: live saves/rejoins and session locks. Studio keeps disposable data because the existing `StudioMemory=true` setting is preserved.
-5. Existing developer-product IDs are still zero; configure IDs belonging to your experience before testing purchases. Existing owner/admin settings are preserved; review them for your account.
-
-The UI selects a dedicated portrait layout on narrow screens; real-device readability and touch hit testing still need Studio/device validation. The map retains the original RiftLayout markers. Move those markers to customize spawn and arena placement; changing lobby geometry itself belongs in `World.luau`.
-
-To convert the rebuilt XML place into the standard binary format, use Lune 0.11.1: `lune run tools/convert_place.luau`. This round-trips the binary and checks instance counts and every script, including duplicate script names.
+- Play solo: click → sell → summon → equip → rebirth; confirm power resets and inventory remains. Check search, Equip Best, Unequip All, recycling and the daily wheel.
+- Use Studio's phone/tablet emulator and Server & Clients modes to test inventory scrolling, text entry, avatar swaps and two players interacting with stations.
+- Use a private published test for real DataStore saves/rejoins and marketplace receipts. Studio uses disposable memory data because the existing `StudioMemory=true` setting is retained.
+- Developer-product IDs remain zero until you configure products belonging to your experience. Existing owner/admin settings and imported audio are retained; review permissions for your account/experience.

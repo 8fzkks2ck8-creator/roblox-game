@@ -12,7 +12,7 @@ local token=game.JobId..Http:GenerateGUID(false)
 local function copy(x) if type(x)~="table" then return x end local t={} for k,v in pairs(x) do t[k]=copy(v) end return t end
 local function fresh()
  local hero=C.Roll(C.Characters,false,false,Random.new())
- return {Coins=C.Economy.StartingCoins,Gems=0,Tickets=0,Boosted=0,Characters={[hero.Id]=1},Cosmetics={},Equipped=hero.Id,Aura="",Codes={},Receipts={},LuckUntil=0,WheelDay=-1,Wins=0,Strength=0}
+ return {Coins=C.Economy.StartingCoins,Gems=0,Tickets=0,Boosted=0,Characters={[hero.Id]=1},Cosmetics={},Equipped=hero.Id,Aura="",Codes={},Receipts={},LuckUntil=0,WheelDay=-1,Wins=0,Strength=0,Rebirths=0}
 end
 function P.Load(player)
  local seed=fresh(); local result
@@ -47,7 +47,7 @@ function P.Change(player,fn,finalizing)
  if not P.Ready[player] or (P.Closing[player] and not finalizing) then return false end
  P.Busy[player]=true
  local pending=P.Pending[player] or 0
- local function merge(d) d.Strength=math.min(C.Training.MaxStrength,(d.Strength or 0)+pending) end
+ local function merge(d) if d.Rebirths==nil then d.Rebirths=0 end;d.Strength=math.min(C.Training.MaxStrength,(d.Strength or 0)+pending) end
  local result; local ok=pcall(function()
   if memory then result=copy(P.Cache[player]); merge(result);fn(result); P.Cache[player]=result; return end
   result=Store:UpdateAsync("p"..player.UserId,function(d)
