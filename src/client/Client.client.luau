@@ -600,7 +600,7 @@ playReveal=function(data)
  local tint=reveal:FindFirstChildOfClass("UIGradient");if tint then tint.Color=ColorSequence.new(item.Color,item.Color:Lerp(Color3.new(0,0,0),.5)) end
  local impactPlayed=false
  local cardShown=false
- local function rewardCard()
+ local function rewardCard(completionReason)
   if serial~=revealSerial or cardShown then return end
   cardShown=true
   summonScene=nil;canvas.Visible=not titleActive;reveal.Visible=true
@@ -617,6 +617,10 @@ playReveal=function(data)
    local aura=panel(stage,Vector2.new(120,120),Vector2.new(235,28),item.Color,true);corner(aura,65)
    label(aura,"AURA",UDim2.fromScale(1,1),UDim2.new(),27)
   end
+  -- The build-up has fully ended and its overlay is gone before the voice starts.
+  if data.Kind=="Character" and item.Tier>=5 and (completionReason=="Completed" or completionReason=="Skipped") then
+   impactPlayed=characterSummonSound(item.Id)
+  end
   if not impactPlayed then sound("Reward",1.4) end
  end
  if data.Kind=="Character" and item.Tier>=5 then
@@ -624,10 +628,7 @@ playReveal=function(data)
   canvas.Visible=false
   local controller=SummonCinematics.Play(item,{
    Parent=p:WaitForChild("PlayerGui"),Portrait=portrait,Preview=data.Preview==true,
-   OnImpact=function()
-    impactPlayed=true
-    if not characterSummonSound(item.Id) then sound("Reveal",1.1) end
-   end,
+   OnImpact=function() sound("Click",.9) end,
    OnComplete=rewardCard,
   })
   -- Setup failure may have already called rewardCard synchronously.

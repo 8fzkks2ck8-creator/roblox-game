@@ -1566,7 +1566,7 @@ playReveal=function(data)
  local tint=reveal:FindFirstChildOfClass("UIGradient");if tint then tint.Color=ColorSequence.new(item.Color,item.Color:Lerp(Color3.new(0,0,0),.5)) end
  local impactPlayed=false
  local cardShown=false
- local function rewardCard()
+ local function rewardCard(completionReason)
   if serial~=revealSerial or cardShown then return end
   cardShown=true
   summonScene=nil;canvas.Visible=not titleActive;reveal.Visible=true
@@ -1583,6 +1583,10 @@ playReveal=function(data)
    local aura=panel(stage,Vector2.new(120,120),Vector2.new(235,28),item.Color,true);corner(aura,65)
    label(aura,"AURA",UDim2.fromScale(1,1),UDim2.new(),27)
   end
+  -- The build-up has fully ended and its overlay is gone before the voice starts.
+  if data.Kind=="Character" and item.Tier&gt;=5 and (completionReason=="Completed" or completionReason=="Skipped") then
+   impactPlayed=characterSummonSound(item.Id)
+  end
   if not impactPlayed then sound("Reward",1.4) end
  end
  if data.Kind=="Character" and item.Tier&gt;=5 then
@@ -1590,10 +1594,7 @@ playReveal=function(data)
   canvas.Visible=false
   local controller=SummonCinematics.Play(item,{
    Parent=p:WaitForChild("PlayerGui"),Portrait=portrait,Preview=data.Preview==true,
-   OnImpact=function()
-    impactPlayed=true
-    if not characterSummonSound(item.Id) then sound("Reveal",1.1) end
-   end,
+   OnImpact=function() sound("Click",.9) end,
    OnComplete=rewardCard,
   })
   -- Setup failure may have already called rewardCard synchronously.
@@ -72418,9 +72419,11 @@ function Scenes.Play(item,ctx)
  local ok,err=xpcall(function()
   local primary,accent=color(preset.Color),color(preset.Accent)
   ui=make("ScreenGui",ctx.Parent);ui.Name="RiftSummonCutscene";ui.DisplayOrder=70;ui.IgnoreGuiInset=true;ui.ResetOnSpawn=false;ui.ZIndexBehavior=Enum.ZIndexBehavior.Sibling
-  local root=make("CanvasGroup",ui);root.Size=UDim2.fromScale(1,1);root.BackgroundColor3=primary:Lerp(Color3.new(0,0,0),.91);root.Active=true;root.GroupTransparency=0
-  local gradient=make("UIGradient",root);gradient.Rotation=30+preset.Seed%120;gradient.Color=ColorSequence.new(primary:Lerp(Color3.new(0,0,0),.84),accent:Lerp(Color3.new(0,0,0),.95))
-  local stage=make("Frame",root);stage.Name="CinematicStage";stage.Size=UDim2.fromOffset(720,620);stage.AnchorPoint=Vector2.new(.5,.5);stage.Position=UDim2.fromScale(.5,.5);stage.BackgroundTransparency=1
+  local root=make("CanvasGroup",ui);root.Size=UDim2.fromScale(1,1);root.BackgroundColor3=Color3.new(1,1,1);root.BackgroundTransparency=1;root.Active=true;root.GroupTransparency=0
+  -- Keep the gradient off CanvasGroup: a group gradient tints the composited actor too.
+  local background=make("Frame",root);background.Name="CinematicBackdrop";background.Size=UDim2.fromScale(1,1);background.BackgroundColor3=Color3.new(1,1,1);background.BorderSizePixel=0
+  local gradient=make("UIGradient",background);gradient.Rotation=30+preset.Seed%120;gradient.Color=ColorSequence.new(primary:Lerp(Color3.fromRGB(95,130,171),.55),accent:Lerp(Color3.fromRGB(147,174,207),.65))
+  local stage=make("Frame",root);stage.Name="CinematicStage";stage.Size=UDim2.fromOffset(720,620);stage.AnchorPoint=Vector2.new(.5,.5);stage.Position=UDim2.fromScale(.5,.5);stage.BackgroundTransparency=1;stage.ZIndex=2
   local fit=make("UIScale",stage)
   local function resize()
    local camera=workspace.CurrentCamera;if not camera then return end
@@ -72439,8 +72442,8 @@ function Scenes.Play(item,ctx)
   local function label(value,y,size,tint)
    local l=make("TextLabel",stage);l.Size=UDim2.fromOffset(700,54);l.Position=UDim2.fromOffset(10,y);l.BackgroundTransparency=1;l.Font=Enum.Font.FredokaOne;l.Text=value;l.TextSize=size;l.TextColor3=tint;l.TextWrapped=true;l.TextStrokeTransparency=.2;l.ZIndex=6;return l
   end
-  local top=frame(root,0,0,0,0,Color3.new(0,0,0),8);top.Size=UDim2.new(1,0,.075,0)
-  local bottom=frame(root,0,0,0,0,Color3.new(0,0,0),8);bottom.Size=UDim2.new(1,0,.075,0);bottom.Position=UDim2.new(0,0,.925,0)
+  local top=frame(root,0,0,0,0,Color3.new(0,0,0),8);top.Size=UDim2.new(1,0,.045,0)
+  local bottom=frame(root,0,0,0,0,Color3.new(0,0,0),8);bottom.Size=UDim2.new(1,0,.045,0);bottom.Position=UDim2.new(0,0,.955,0)
   label(({[5]="MYTHIC",[6]="SECRET",[7]="SUPER SECRET"})[item.Tier]..(ctx.Preview and " PREVIEW" or " SUMMON"),18,23,accent)
   local phrase=label(preset.Title,71,31,Color3.new(1,1,1))
   local name=label(item.Name,500,36,primary:Lerp(Color3.new(1,1,1),.5));name.TextTransparency=1
@@ -72449,14 +72452,14 @@ function Scenes.Play(item,ctx)
   local fill=frame(progress,0,3,0,0,accent,6)
   local skip=make("TextButton",root);skip.Name="SkipCutscene";skip.AnchorPoint=Vector2.new(1,1);skip.Position=UDim2.new(1,-24,1,-16);skip.Size=UDim2.fromOffset(180,42);skip.BackgroundColor3=Color3.fromRGB(21,26,37);skip.TextColor3=Color3.new(1,1,1);skip.Font=Enum.Font.GothamBold;skip.TextSize=15;skip.Text="SKIP  [SPACE / B]";skip.AutoButtonColor=true;skip.ZIndex=12;skip.Selectable=true;skip.Modal=true
   local corner=make("UICorner",skip);corner.CornerRadius=UDim.new(0,10)
-  local wash=frame(stage,720,620,0,0,primary,5);wash.BackgroundTransparency=1
+  local wash=frame(stage,720,620,0,0,primary,1);wash.BackgroundTransparency=1
   -- Existing portrait construction supplies exactly one character clone, separately
   -- budgeted from the effect pool. It is never cloned or rebuilt during a frame.
   view=ctx.Portrait(stage,item.Id,UDim2.fromOffset(130,94),UDim2.fromOffset(460,420),"Cinematic")
   assert(view,"No character preview")
   local world=view:FindFirstChildOfClass("WorldModel")
   actor=world and world:FindFirstChildOfClass("Model");base=actor and actor:GetPivot()
-  view.ZIndex=3;view.LightColor=primary:Lerp(Color3.new(1,1,1),.75)
+  view.ZIndex=3;view.LightColor=Color3.new(1,1,1);view.Ambient=Color3.fromRGB(225,225,235);view.LightDirection=Vector3.new(-1,-1,-1)
   local rings={}
   for index=1,3 do
    local f=frame(stage,140+index*45,140+index*45,360,295,index%2==0 and accent or primary,2);f.AnchorPoint=Vector2.new(.5,.5);f.BackgroundTransparency=1;f.Rotation=index*25
@@ -72466,7 +72469,7 @@ function Scenes.Play(item,ctx)
   end
   local particles={}
   for index=1,count do
-   local f=frame(stage,6,15,360,295,index%3==0 and accent or primary,4)
+   local f=frame(stage,6,15,360,295,index%3==0 and accent or primary,2)
    f.AnchorPoint=Vector2.new(.5,.5);f.BackgroundTransparency=.25
    if preset.Motif=="orbit" or preset.Motif=="petals" then local c=make("UICorner",f);c.CornerRadius=UDim.new(1,0) end
    table.insert(particles,f)
@@ -72483,12 +72486,12 @@ function Scenes.Play(item,ctx)
    local elapsed=math.max(0,now-started);local p=math.clamp(elapsed/duration,0,1)
    if p&gt;=1 then finish("Completed");return end
    if not ui.Parent then finish("Closed");return end
-   local enter=ease(p/.24);local exit=math.clamp((p-.89)/.11,0,1)
+   local enter=ease(p/.12);local exit=math.clamp((p-.89)/.11,0,1)
    local impact=math.max(0,1-math.abs(p-.55)/.12)
    root.GroupTransparency=math.max(1-enter,exit)
-   wash.BackgroundTransparency=1-impact*(.08+preset.Pulse*.3) -- a tint accent, never a white flash
+   wash.BackgroundTransparency=1-impact*(.03+preset.Pulse*.1) -- a tint accent, never a white flash
    phrase.TextTransparency=math.clamp((p-.68)/.18,0,1)
-   name.TextTransparency=1-ease((p-.5)/.18)
+   name.TextTransparency=1-ease((p-.24)/.16)
    caption.Text=ctx.Preview and "Preview only • No rewards granted" or p&gt;.6 and "Already saved to your collection" or "A new power is awakening..."
    fill.Size=UDim2.fromOffset(420*p,3)
    if not impacted and p&gt;=.52 then impacted=true;if ctx.OnImpact then local soundOK,soundError=pcall(ctx.OnImpact);if not soundOK then warn(tostring(soundError)) end end end

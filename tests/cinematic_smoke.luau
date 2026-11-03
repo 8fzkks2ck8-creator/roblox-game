@@ -126,3 +126,42 @@ local previewLabel=false
 for _,item in ipairs(canvas:GetDescendants()) do if item:IsA("TextLabel") and item.Text=="PREVIEW ONLY • No fighter was granted." then previewLabel=true end end
 check(previewLabel and data.Coins==coinsBefore and data.Equipped==equippedBefore,"cutscene preview is labeled and does not change progression")
 findButton("CLOSE PREVIEW").Activated:Fire()
+
+-- Readability: the gradient is on a backdrop, never the composited character group.
+scene,step,outcome=startScene("gojo")
+local brightRoot=playerGui:FindFirstChild("RiftSummonCutscene"):FindFirstChildOfClass("CanvasGroup")
+local brightView=brightRoot.CinematicStage:FindFirstChildOfClass("ViewportFrame")
+local backdrop=brightRoot:FindFirstChild("CinematicBackdrop")
+check(brightRoot.BackgroundTransparency==1 and brightRoot.BackgroundColor3.R==1 and not brightRoot:FindFirstChildOfClass("UIGradient") and backdrop:FindFirstChildOfClass("UIGradient")~=nil,"background gradient cannot darken the character composite")
+check(brightView.LightColor.R==1 and brightView.LightColor.G==1 and brightView.LightColor.B==1 and brightView.Ambient.R>.8,"cinematic actor has bright neutral lighting")
+local readableFX=true
+for _,item in ipairs(brightRoot.CinematicStage:GetChildren()) do if item:IsA("Frame") and item.Name~="CinematicStage" and item.ZIndex==4 then readableFX=false end end
+check(readableFX,"moving effect shards no longer cover the character")
+scene:Cancel()
+-- Real client/audio sequencing: build-up completes before the voice starts.
+local summonSounds=Instance.new("Folder",sceneAssets);summonSounds.Name="SummonSounds"
+local voiceTemplate=Instance.new("Sound",summonSounds);voiceTemplate.Name="gojo";voiceTemplate.SoundId="rbxassetid://test_voice";voiceTemplate.Volume=.8
+local oldPlaySound=methods.Play
+methods.Play=function(self)
+ if self:IsA("Sound") and self.Name=="CharacterSummonSound" then
+  self.HudVisibleAtStart=canvas.Visible;self.OverlayPresentAtStart=playerGui:FindFirstChild("RiftSummonCutscene")~=nil
+ end
+ oldPlaySound(self)
+end
+local time=0;local actualScenePlay=cinematicModule.Play;local activeDuration
+cinematicModule.Play=function(item,ctx)
+ ctx.Clock=function() return time end
+ local result=actualScenePlay(item,ctx);activeDuration=result.Metrics.Duration;return result
+end
+events.OnClientEvent:Fire("Reveal",{Kind="Character",Id="gojo"})
+time=activeDuration*.6;services.RunService.RenderStepped:Fire()
+check(not services.SoundService:FindFirstChild("CharacterSummonSound"),"voice line does not play during cinematic build-up or impact")
+time=activeDuration+.1;services.RunService.RenderStepped:Fire()
+local voice=services.SoundService:FindFirstChild("CharacterSummonSound")
+check(voice and voice.HudVisibleAtStart and not voice.OverlayPresentAtStart,"voice starts on the visible reward card after the cinematic is removed")
+findButton("KEEP IT!").Activated:Fire()
+check(voice.Parent==nil,"closing the reward card stops its voice line")
+events.OnClientEvent:Fire("Reveal",{Kind="Character",Id="gojo"});skipActive()
+check(services.SoundService:FindFirstChild("CharacterSummonSound")~=nil and not playerGui:FindFirstChild("RiftSummonCutscene"),"Skip moves directly to the voice and reward card without visual overlap")
+findButton("KEEP IT!").Activated:Fire()
+cinematicModule.Play=actualScenePlay;methods.Play=oldPlaySound
