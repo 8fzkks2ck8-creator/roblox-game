@@ -222,39 +222,66 @@ open=function(name)
  menuSerial+=1;page=name; window.Visible=true;dim.Visible=true; sound("Open",0.85); render()
  window.Position=modalPosition+UDim2.fromOffset(0,18); Tween:Create(window,TweenInfo.new(0.25,Enum.EasingStyle.Back),{Position=modalPosition}):Play()
 end
--- Clone the pack's actual ImageButtons, preserving their native artwork.
-local function packButton(parent,text,width,height,key,fn)
+-- Original geometric icons; no external assets need to load.
+local function icon(parent,kind,color)
+ local holder=Instance.new("Frame",parent); holder.Size=UDim2.fromOffset(60,50); holder.Position=UDim2.fromOffset(16,5); holder.BackgroundTransparency=1; holder.ZIndex=2
  local assets=folder:FindFirstChild("Assets")
+ local icons=assets and assets:FindFirstChild("GUIIcons")
  local pack=assets and assets:FindFirstChild("UIMegaPack")
- local template=pack and pack:FindFirstChild(key)
- if not template or not template:IsA("ImageButton") then return button(parent,text,width,height,palette.Cyan,fn) end
- local b=template:Clone();b.Name="PackButton_"..key;b:SetAttribute("RiftPackTemplate",key)
- -- Only the sanitized visual template is used. Game actions are connected here.
- for _,child in ipairs(b:GetDescendants()) do if child:IsA("LuaSourceContainer") then child:Destroy() end end
- b.Size=UDim2.fromOffset(width,height);b.Position=UDim2.new();b.AnchorPoint=Vector2.zero;b.Visible=true;b.Active=true;b.Selectable=true;b.BackgroundTransparency=1;b.AutoButtonColor=false;b.ScaleType=Enum.ScaleType.Fit;b.Parent=parent
- local caption=label(b,text,UDim2.fromOffset(170,24),UDim2.new(.5,-85,1,3),17);caption.Name="Label";caption.Visible=false
- local motion=b:FindFirstChildOfClass("UIScale") or Instance.new("UIScale",b);motion.Scale=1
- b.MouseEnter:Connect(function() caption.Visible=key~="Mouse";Tween:Create(motion,TweenInfo.new(.13),{Scale=1.07}):Play() end)
- b.MouseLeave:Connect(function() caption.Visible=false;Tween:Create(motion,TweenInfo.new(.13),{Scale=1}):Play() end)
- b.SelectionGained:Connect(function() caption.Visible=key~="Mouse" end)
- b.SelectionLost:Connect(function() caption.Visible=false end)
- b.Activated:Connect(function()
-  sound("Click",1.7);Tween:Create(motion,TweenInfo.new(.07),{Scale=.94}):Play()
-  task.delay(.08,function() if motion.Parent then Tween:Create(motion,TweenInfo.new(.16,Enum.EasingStyle.Back),{Scale=1}):Play() end end)
-  fn()
- end)
- return b
+ local mapping={Shop="Shop",Summon="Luck",Inventory="Inventory",Cosmetics="Super Gem's",Wheel="WheelSpin",Codes="Code's"}
+ local packed=pack and pack:FindFirstChild(mapping[kind] or kind)
+ if packed and (packed:IsA("ImageButton") or packed:IsA("ImageLabel")) and packed.Image~="" then
+  local image=Instance.new("ImageLabel",holder);image.Name="MegaPackIcon";image.BackgroundTransparency=1;image.Size=UDim2.fromScale(1,1);image.Image=packed.Image;image.ImageRectOffset=packed.ImageRectOffset;image.ImageRectSize=packed.ImageRectSize;image.ScaleType=Enum.ScaleType.Fit;return
+ end
+ local template=icons and icons:FindFirstChild(kind)
+ if template and template:IsA("ImageLabel") and template.Image~="" then
+  local image=template:Clone();image.Name="CustomIcon";image.Size=UDim2.fromScale(1,1);image.Position=UDim2.new();image.AnchorPoint=Vector2.new(0,0);image.Visible=true;image.Parent=holder
+  return
+ end
+ if C.Icons[kind] and C.Icons[kind]~="" then
+  local image=Instance.new("ImageLabel",holder);image.Size=UDim2.fromScale(1,1);image.BackgroundTransparency=1;image.Image=C.Icons[kind];image.ScaleType=Enum.ScaleType.Fit;return
+ end
+ local function piece(size,pos,tint,rot)
+  local f=Instance.new("Frame",holder); f.Size=UDim2.fromOffset(size.X,size.Y); f.Position=UDim2.fromOffset(pos.X,pos.Y); f.BackgroundColor3=tint; f.Rotation=rot or 0; f.BorderSizePixel=0; corner(f,10); outline(f,palette.Ink,2); return f
+ end
+ if kind=="Shop" then
+  piece(Vector2.new(42,28),Vector2.new(9,18),Color3.fromRGB(255,83,123),-10)
+  for x=16,40,8 do piece(Vector2.new(4,16),Vector2.new(x,23),Color3.fromRGB(180,32,78),-10) end
+  local handle=piece(Vector2.new(27,20),Vector2.new(17,6),Color3.fromRGB(255,156,180),-10); handle.BackgroundTransparency=1
+ elseif kind=="Summon" then
+  piece(Vector2.new(17,42),Vector2.new(22,1),palette.White,35)
+  piece(Vector2.new(35,8),Vector2.new(9,30),palette.Gold,35)
+  piece(Vector2.new(9,16),Vector2.new(11,35),palette.Pink,35)
+ elseif kind=="Inventory" then
+  piece(Vector2.new(34,40),Vector2.new(17,5),Color3.fromRGB(41,164,255),-15)
+  piece(Vector2.new(26,34),Vector2.new(9,9),Color3.fromRGB(96,219,255),-15)
+  piece(Vector2.new(18,3),Vector2.new(16,20),palette.White,-15)
+  piece(Vector2.new(18,3),Vector2.new(17,27),palette.White,-15)
+ elseif kind=="Cosmetics" then
+  local orb=piece(Vector2.new(43,43),Vector2.new(9,2),Color3.fromRGB(211,112,255),0); corner(orb,24)
+  piece(Vector2.new(22,22),Vector2.new(20,12),palette.White,45)
+ elseif kind=="Wheel" then
+  local disk=piece(Vector2.new(44,44),Vector2.new(8,2),palette.Mint,0); corner(disk,24)
+  for _,rotation in ipairs({0,45,90,135}) do piece(Vector2.new(36,5),Vector2.new(12,22),palette.Gold,rotation) end
+  local hub=piece(Vector2.new(12,12),Vector2.new(24,18),palette.White,0); corner(hub,8)
+ else
+  piece(Vector2.new(47,29),Vector2.new(7,12),palette.Gold,-12)
+  label(holder,"#",UDim2.fromScale(1,1),UDim2.new(),36,palette.White)
+ end
 end
 local bottomNav={}
 local nav={{"SHOP","Shop",palette.Pink},{"SUMMON","Summon",palette.Gold},{"FIGHTERS","Inventory",palette.Cyan},{"AURAS","Cosmetics",Color3.fromRGB(183,71,255)},{"WHEEL","Wheel",palette.Mint},{"CODES","Codes",Color3.fromRGB(255,153,43)}}
-local navTemplates={Shop="Shop",Summon="Luck",Inventory="Inventory",Cosmetics="Super Gem's",Wheel="WheelSpin",Codes="Code's"}
 for i,v in ipairs(nav) do
- local b=packButton(canvas,v[1],84,84,navTemplates[v[2]],function() open(v[2]) end)
- b.Position=UDim2.fromOffset(290+(i-1)*105,666);b.Label.Position=UDim2.new(.5,-85,0,-26);table.insert(bottomNav,b)
+ local b=button(canvas,v[1],94,84,v[3],function() open(v[2]) end); b.Position=UDim2.fromOffset(285+(i-1)*105,666)
+ table.insert(bottomNav,b)
+ b.Label.Position=UDim2.fromOffset(0,56); b.Label.Size=UDim2.fromOffset(94,26); b.Label.TextSize=18
+ icon(b,v[2],v[3])
 end
-local topSell=packButton(canvas,"SELL",72,72,"Money",function() open("Sell") end)
-local topFighters=packButton(canvas,"FIGHTERS",72,72,"Inventory",function() open("Inventory") end)
-local topRebirth=packButton(canvas,"REBIRTH",72,72,"Rebirth",function() open("Rebirth") end)
+local topSell=button(canvas,"SELL",220,54,palette.Gold,function() open("Sell") end); topSell.Position=UDim2.fromOffset(275,7); topSell.Label.TextSize=30; gleam(topSell,190,54)
+local topRebirth=button(canvas,"REBIRTH",220,54,palette.Mint,function() open("Rebirth") end);topRebirth.Position=UDim2.fromOffset(745,7);topRebirth.Label.TextSize=29;gleam(topRebirth,190,54)
+icon(topSell,"Money",palette.Gold);topSell.Label.Position=UDim2.fromOffset(70,0);topSell.Label.Size=UDim2.new(1,-74,1,-6);topSell.Label.TextSize=25
+icon(topRebirth,"Rebirth",palette.Pink);topRebirth.Label.Position=UDim2.fromOffset(70,0);topRebirth.Label.Size=UDim2.new(1,-74,1,-6);topRebirth.Label.TextSize=24
+local topFighters=button(canvas,"FIGHTERS",220,54,palette.Cyan,function() open("Inventory") end);topFighters.Position=UDim2.fromOffset(510,7);topFighters.Label.TextSize=28
 local shop=button(canvas,"STARTER PACK",205,110,palette.Gold,function() selectedProduct="Starter"; open("Shop") end); shop.Position=UDim2.fromOffset(10,240); shop.Label.Position=UDim2.fromOffset(6,3); shop.Label.Size=UDim2.fromOffset(193,30); shop.Label.TextXAlignment=Enum.TextXAlignment.Left
 label(shop,"Sasuke + 5 spins\n+ 1 boosted ticket",UDim2.fromOffset(190,43),UDim2.fromOffset(7,34),16)
 local packOpen=button(shop,"VIEW PACK",110,25,palette.Mint,function() selectedProduct="Starter"; open("Shop") end); packOpen.Position=UDim2.fromOffset(85,80); packOpen.Label.TextSize=16; gleam(shop,205,110)
@@ -268,14 +295,14 @@ local function train()
  if os.clock()-lastTrain<C.Training.Interval then return end
  lastTrain=os.clock();call("Train")
 end
-local trainButton=packButton(canvas,"CLICK TO TRAIN",84,84,"Mouse",train);trainButton.Position=UDim2.fromOffset(558,520)
+local trainButton=button(canvas,"CLICK TO TRAIN",310,60,palette.Gold,train);trainButton.Position=UDim2.fromOffset(445,530)
 local strengthLabel=label(canvas,"POWER 0",UDim2.fromOffset(420,32),UDim2.fromOffset(390,495),24,palette.Gold)
 local progressTrack=panel(canvas,Vector2.new(500,16),Vector2.new(350,608),palette.Ink,false)
 local progressFill=Instance.new("Frame",progressTrack);progressFill.Size=UDim2.fromScale(0,1);progressFill.BackgroundColor3=palette.Mint;progressFill.BorderSizePixel=0;corner(progressFill,8);gradient(progressFill,palette.Mint)
 local progressText=label(progressTrack,"",UDim2.fromOffset(500,24),UDim2.fromOffset(0,18),15)
 local function trainingHud()
  if not state then return end
- strengthLabel.Text=Layout.Number(state.Strength).." POWER  •  +"..Layout.Number(state.ClickGain or 1).." / CLICK"
+ strengthLabel.Text=Layout.Number(state.Strength).." POWER  •  "..Layout.Number(state.SellValue or ((state.Strength or 0)*C.Clicker.SellRate)).." SELL VALUE"
  trainButton.Label.Text="CLICK +"..Layout.Number(state.ClickGain or 1).." POWER"
  local cost=state.RebirthCost or C.RebirthCost(state.Rebirths)
  local maxed=(state.Rebirths or 0)>=C.Clicker.MaxRebirths
@@ -728,14 +755,14 @@ relayout=function()
  logo.Position=UDim2.fromOffset(12,10)
  local tops={topSell,topFighters,topRebirth}
  for i,b in ipairs(tops) do
-  b.Position=portrait and UDim2.fromOffset(150+(i-1)*180,154) or UDim2.fromOffset(425+(i-1)*115,7)
-  b.Size=UDim2.fromOffset(72,72)
+  b.Position=portrait and UDim2.fromOffset(12+(i-1)*248,154) or UDim2.fromOffset(275+(i-1)*235,7)
+  b.Size=UDim2.fromOffset(portrait and 240 or 220,54)
  end
  header.Position=portrait and UDim2.fromOffset(12,76) or UDim2.fromOffset(12,648)
- for i,b in ipairs(bottomNav) do b.Position=portrait and UDim2.fromOffset(18+(i-1)*124,1106) or UDim2.fromOffset(285+(i-1)*105,666);b.Size=UDim2.fromOffset(84,84) end
+ for i,b in ipairs(bottomNav) do b.Position=portrait and UDim2.fromOffset(18+(i-1)*124,1106) or UDim2.fromOffset(285+(i-1)*105,666);b.Size=UDim2.fromOffset(portrait and 104 or 94,84) end
  for _,item in ipairs({shop,quests,goalText,practice,luck,boost}) do item.Visible=not portrait end
- trainButton.Position=portrait and UDim2.fromOffset(338,930) or UDim2.fromOffset(558,520)
- trainButton.Size=UDim2.fromOffset(84,84)
+ trainButton.Position=portrait and UDim2.fromOffset(140,936) or UDim2.fromOffset(445,530)
+ trainButton.Size=UDim2.fromOffset(portrait and 480 or 310,60)
  strengthLabel.Position=portrait and UDim2.fromOffset(80,890) or UDim2.fromOffset(330,495);strengthLabel.Size=UDim2.fromOffset(portrait and 600 or 540,34)
  bottom.Position=portrait and UDim2.fromOffset(55,860) or UDim2.fromOffset(275,460)
  progressTrack.Position=portrait and UDim2.fromOffset(130,1020) or UDim2.fromOffset(350,608)

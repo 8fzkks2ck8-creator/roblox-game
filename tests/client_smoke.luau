@@ -7,7 +7,7 @@ local function signal()
   return {Disconnect=function() entry.Active=false end}
  end,Fire=function(_,...) for _,entry in ipairs(table.clone(callbacks)) do if entry.Active then entry.Fn(...) end end end}
 end
-local eventNames={Activated=true,MouseEnter=true,MouseLeave=true,Changed=true,SelectionGained=true,SelectionLost=true,CharacterAdded=true,OnClientEvent=true}
+local eventNames={Activated=true,MouseEnter=true,MouseLeave=true,Changed=true,CharacterAdded=true,OnClientEvent=true}
 local oldIndex=nodeMeta.__index
 nodeMeta.__index=function(t,k)
  local value=oldIndex(t,k);if value~=nil then return value end
@@ -79,11 +79,6 @@ local shared=Instance.new("Folder",rs);shared.Name="AnimeRift";shared:SetAttribu
 for _,name in ipairs({"Config","Polish","ClientLayout","TitleScreen","OutfitDetails","IdleMotion"}) do local module=Instance.new("ModuleScript",shared);module.Name=name end
 local request=Instance.new("RemoteFunction",shared);request.Name="Request"
 local events=Instance.new("RemoteEvent",shared);events.Name="Event"
-local assets=Instance.new("Folder",shared);assets.Name="Assets"
-local pack=Instance.new("Folder",assets);pack.Name="UIMegaPack"
-for _,name in ipairs({"Shop","Luck","Inventory","Super Gem's","WheelSpin","Code's","Money","Rebirth","Mouse"}) do
- local template=Instance.new("ImageButton",pack);template.Name=name;template.Image="rbxassetid://pack_"..name
-end
 local user=Instance.new("Player");user.UserId=123
 local playerGui=Instance.new("PlayerGui",user);playerGui.Name="PlayerGui"
 services.Players={LocalPlayer=user}
@@ -111,7 +106,7 @@ local ui=playerGui:FindFirstChild("AnimeRiftUI");check(ui~=nil,"client builds th
 local canvas=ui:FindFirstChildOfClass("Frame")
 local function findButton(text,parent)
  for _,item in ipairs((parent or canvas):GetDescendants()) do
-  if (item:IsA("TextButton") or item:IsA("ImageButton")) and item:FindFirstChild("Label") and item.Label.Text==text then return item end
+  if item:IsA("TextButton") and item:FindFirstChild("Label") and item.Label.Text==text then return item end
  end
  error("Missing button: "..text)
 end
@@ -205,12 +200,3 @@ simulation.PreSimulation:Fire()
 check(idleNeck.C0~=idleBase,"procedural idle adds a tiny pose offset")
 stopIdle()
 check(idleNeck.C0==idleBase,"stopping an idle restores the original joint pose")
-
-local actualPackButtons=0
-for _,item in ipairs(canvas:GetChildren()) do
- if item:GetAttribute("RiftPackTemplate") then
-  actualPackButtons+=1
-  check(item:IsA("ImageButton") and not item:FindFirstChild("CheckerMask") and not item:FindFirstChild("MegaPackIcon"),"pack button replaces old decorated wrapper: "..item:GetAttribute("RiftPackTemplate"))
- end
-end
-check(actualPackButtons==10,"all six navigation, three top actions and the click control use actual pack buttons")
