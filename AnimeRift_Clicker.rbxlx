@@ -980,6 +980,7 @@ local TitleScreen=require(folder:WaitForChild("TitleScreen"))
 local OutfitDetails=require(folder:WaitForChild("OutfitDetails"))
 local IdleMotion=require(folder:WaitForChild("IdleMotion"))
 local SummonCinematics=require(folder:WaitForChild("SummonCinematics"))
+local BrolySequence=require(folder:WaitForChild("BrolySequence"))
 local Request=folder:WaitForChild("Request"); local Event=folder:WaitForChild("Event")
 local ui=Instance.new("ScreenGui"); ui.Name="AnimeRiftUI"; ui.ResetOnSpawn=false; ui.ZIndexBehavior=Enum.ZIndexBehavior.Sibling; ui.Parent=p:WaitForChild("PlayerGui")
 local canvas=Instance.new("Frame",ui); canvas.Size=UDim2.fromOffset(1200,760); canvas.AnchorPoint=Vector2.new(0.5,0.5); canvas.Position=UDim2.fromScale(0.5,0.5); canvas.BackgroundTransparency=1
@@ -1011,6 +1012,10 @@ local loadingStarted=os.clock()
 local apply
 local revealing=false
 local summonScene
+local brolyScene
+local startBroly
+local skillStateAt=0
+local skillRefreshAt=0
 local revealSerial=0
 local wheelSpinning=false
 local wheelButton
@@ -1101,6 +1106,7 @@ local function notify(text)
 end
 local function call(action,arg)
  if titleActive and action~="State" then return end
+ if brolyScene and brolyScene:IsPlaying() and action~="State" then return end
  if revealing and action~="State" then notify("Finish your character reveal first."); return end
  if busy then if action~="State" and action~="Train" then notify("Finishing your previous action...") end; return end
  if folder:GetAttribute("ServerStatus")=="Error" then
@@ -1186,7 +1192,7 @@ local function action(text,color,fn)
  rowNumber=rowNumber+1; local b=button(list,text,contentWidth,52,color,fn); b.LayoutOrder=rowNumber; return b
 end
 open=function(name)
- if titleActive then return end
+ if titleActive or (brolyScene and brolyScene:IsPlaying()) then return end
  if revealing then return end
  menuSerial+=1;page=name; window.Visible=true;dim.Visible=true; sound("Open",0.85); render()
  window.Position=modalPosition+UDim2.fromOffset(0,18); Tween:Create(window,TweenInfo.new(0.25,Enum.EasingStyle.Back),{Position=modalPosition}):Play()
@@ -1259,12 +1265,17 @@ local goalText=label(canvas,"Click to collect power\nSell power for coins\nSummo
 local practice=button(canvas,"REBIRTH BONUSES",205,43,palette.Mint,function() open("Rebirth") end);practice.Position=UDim2.fromOffset(10,520)
 local lastTrain=-math.huge
 local function train()
- if titleActive then return end
+ if titleActive or (brolyScene and brolyScene:IsPlaying()) then return end
  if not state or page or window.Visible or revealing or Input:GetFocusedTextBox() then return end
  if os.clock()-lastTrain&lt;C.Training.Interval then return end
  lastTrain=os.clock();call("Train")
 end
 local trainButton=button(canvas,"CLICK TO TRAIN",310,60,palette.Gold,train);trainButton.Position=UDim2.fromOffset(445,530)
+local function activateBroly()
+ if titleActive or revealing or not state or state.Equipped~="broly" then return end
+ call("BrolySkill")
+end
+local rageButton=button(canvas,"LEGENDARY RAGE [G]",185,76,palette.Mint,activateBroly);rageButton.Name="BrolySkillButton";rageButton.Visible=false;rageButton.Label.TextSize=20
 local strengthLabel=label(canvas,"POWER 0",UDim2.fromOffset(420,32),UDim2.fromOffset(390,495),24,palette.Gold)
 local progressTrack=panel(canvas,Vector2.new(500,16),Vector2.new(350,608),palette.Ink,false)
 local progressFill=Instance.new("Frame",progressTrack);progressFill.Size=UDim2.fromScale(0,1);progressFill.BackgroundColor3=palette.Mint;progressFill.BorderSizePixel=0;corner(progressFill,8);gradient(progressFill,palette.Mint)
@@ -1299,28 +1310,32 @@ local buffTip=label(canvas,"2x luck • boosts Rare+ odds",UDim2.fromOffset(240,
 buffIcon.MouseEnter:Connect(function() buffTip.Visible=buffIcon.Visible end)
 buffIcon.MouseLeave:Connect(function() buffTip.Visible=false end)
 local function portrait(parent,id,pos,size,spin)
- local lightweight=spin=="Cinematic" or spin=="Light"
+ local lightweight=spin=="Cinematic" or spin=="Light" or spin=="Skill"
  local outfit=C.Outfits[id]
  local view=Instance.new("ViewportFrame",parent); view.Position=pos; view.Size=size; view.BackgroundTransparency=1; view.LightColor=Color3.new(1,1,1); view.Ambient=Color3.fromRGB(195,195,195); view.ZIndex=2
  local camera=Instance.new("Camera",view); camera.CFrame=CFrame.lookAt(Vector3.new(3,2,-7),Vector3.new(0,0.4,0)); camera.FieldOfView=34; view.CurrentCamera=camera
  local assets=folder:FindFirstChild("Assets");local models=assets and assets:FindFirstChild("CharacterModels");local custom=models and models:FindFirstChild(id)
+ if spin=="Skill" and state and state.Equipped=="broly" and p.Character then custom=p.Character end
  if custom and custom:IsA("Model") and lightweight then
   local descendants=custom:GetDescendants();local parts=0
   for _,item in ipairs(descendants) do if item:IsA("BasePart") then parts+=1 end end
   if #descendants&gt;SummonCinematics.Budget.MaxPreviewDescendants or parts&gt;SummonCinematics.Budget.MaxPreviewParts or parts==0 then custom=nil end
  end
  if custom and custom:IsA("Model") then
-  local wm=Instance.new("WorldModel",view);local display=custom:Clone()
+  local wm=Instance.new("WorldModel",view)
+  local archivable=custom.Archivable;custom.Archivable=true
+  local cloned,display=pcall(function() return custom:Clone() end);custom.Archivable=archivable
+  if not cloned or not display then error("Character preview could not be cloned") end
   local descendants=display:GetDescendants()
   for index=#descendants,1,-1 do
    local v=descendants[index]
-   if v:IsA("LuaSourceContainer") or (lightweight and (v:IsA("ParticleEmitter") or v:IsA("Trail") or v:IsA("Beam") or v:IsA("Light") or v:IsA("Sound"))) then v:Destroy()
+   if v:IsA("LuaSourceContainer") or (lightweight and (v:IsA("ParticleEmitter") or v:IsA("Trail") or v:IsA("Beam") or v:IsA("Light") or v:IsA("Sound") or v:IsA("LayerCollector"))) then v:Destroy()
    elseif v:IsA("BasePart") then v.Anchored=true;v.CanCollide=false;v.CanTouch=false end
   end
   display.Parent=wm;display:PivotTo(CFrame.new())
   local cf,sz=display:GetBoundingBox();local distance=math.max(sz.X,sz.Y,sz.Z)*2
   camera.CFrame=CFrame.lookAt(cf.Position+Vector3.new(distance*0.35,sz.Y*0.12,-distance),cf.Position)
-  if spin~="Cinematic" then spinningPreviews[view]={Model=display,Base=display:GetPivot(),Started=os.clock(),Idle=spin~=true,Id=id} end
+  if spin~="Cinematic" and spin~="Skill" then spinningPreviews[view]={Model=display,Base=display:GetPivot(),Started=os.clock(),Idle=spin~=true,Id=id} end
   return view
  end
  if not outfit then outfit=C.Outfits.yamcha end
@@ -1338,7 +1353,7 @@ local function portrait(parent,id,pos,size,spin)
   for i=-2,2 do local hair=block("Hair",Vector3.new(0.25,0.5,0.8),Vector3.new(i*0.2,2,0),outfit.Hair); hair.Rotation=Vector3.new(0,0,-i*12) end
  end
  OutfitDetails.Apply(display,outfit,display,true)
- if spin~="Cinematic" then spinningPreviews[view]={Model=display,Base=display:GetPivot(),Started=os.clock(),Idle=spin~=true,Id=id} end
+ if spin~="Cinematic" and spin~="Skill" then spinningPreviews[view]={Model=display,Base=display:GetPivot(),Started=os.clock(),Idle=spin~=true,Id=id} end
  return view
 end
 renderInventory=function()
@@ -1490,6 +1505,7 @@ render=function()
  elseif page=="Cutscenes" then
   if not (state.Studio or state.IsAdmin) then row("Cutscene previews are available in Studio or to admins.",65);return end
   row("LOCAL CUTSCENE PREVIEWS\nNo coins, tickets or fighters are granted. Skip any scene, then close its preview card to watch another.",85)
+  action("PREVIEW BROLY SKILL • NO BOOST",palette.Mint,function() startBroly(true) end)
   for _,hero in ipairs(C.Characters) do
    if hero.Tier&gt;=5 then action("PREVIEW • "..hero.Name,hero.Color,function() playReveal({Kind="Character",Id=hero.Id,Preview=true}) end) end
   end
@@ -1557,6 +1573,7 @@ local done=button(reveal,"KEEP IT!",220,36,palette.Mint,function()
  if #revealQueue&gt;0 then local nextItem=table.remove(revealQueue,1);playReveal(nextItem) end
 end);done.Position=UDim2.fromOffset(205,316)
 playReveal=function(data)
+ if brolyScene and brolyScene:IsPlaying() then table.insert(revealQueue,data);return end
  if revealing then table.insert(revealQueue,data);return end
  local item=C.Find(data.Kind=="Character" and C.Characters or C.Cosmetics,data.Id)
  if not item then notify("Unknown reward. Reopen inventory to refresh.");return end
@@ -1620,6 +1637,29 @@ playReveal=function(data)
   rewardCard()
  end)
 end
+startBroly=function(preview)
+ if titleActive or revealing or (brolyScene and brolyScene:IsPlaying()) then return end
+ local focused=Input:GetFocusedTextBox();if focused then focused:ReleaseFocus() end
+ canvas.Visible=false
+ local result=BrolySequence.Play({Player=p,Parent=p:WaitForChild("PlayerGui"),Portrait=portrait,Preview=preview,SoundId=C.BrolySkill.SoundId,Character=p.Character,
+  OnComplete=function(reason)
+   brolyScene=nil;canvas.Visible=not titleActive
+   if not preview then
+    if reason=="Completed" and C.BrolySkill.SoundId=="" then characterSummonSound("broly") end
+    task.spawn(function()
+     local r=call("State")
+     if r and r.State then
+      apply(r.State)
+      if reason=="Completed" and r.State.BrolySkill and r.State.BrolySkill.Active then notify("LEGENDARY RAGE • 3x click power is active!") end
+     end
+    end)
+    if reason=="Skipped" then notify("Visuals skipped. The server charge timer still applies.") end
+   end
+   if #revealQueue&gt;0 and not revealing then playReveal(table.remove(revealQueue,1)) end
+  end,
+ })
+ if result and result:IsPlaying() then brolyScene=result end
+end
 local eventSerial=0
 local function party(data)
  eventSerial=eventSerial+1;local serial=eventSerial;notify(data.Text);sound("Reward",1.1)
@@ -1637,7 +1677,9 @@ local function party(data)
  end)
 end
 apply=function(s)
- if not s then return end; state=s;if titleScreen then titleScreen:Refresh() end;Polish.Aura(p.Character,s.Aura); offset=s.ServerTime-os.time()
+ if not s then return end; state=s;skillStateAt=os.clock();
+ if s.Equipped=="broly" then BrolySequence.Preload(C.BrolySkill.SoundId) end
+if titleScreen then titleScreen:Refresh() end;Polish.Aura(p.Character,s.Aura); offset=s.ServerTime-os.time()
  if coinTween then coinTween:Cancel() end;if gemTween then gemTween:Cancel() end
  coinTween=Tween:Create(coinCounter,TweenInfo.new(.28,Enum.EasingStyle.Quad),{Value=s.Coins});coinTween:Play()
  gemTween=Tween:Create(gemCounter,TweenInfo.new(.28,Enum.EasingStyle.Quad),{Value=s.Gems});gemTween:Play();winsLabel.Text=(s.Rebirths or 0).." REBIRTHS"
@@ -1648,8 +1690,11 @@ apply=function(s)
 end
 Event.OnClientEvent:Connect(function(kind,data)
  if kind=="State" then apply(data)
+ elseif kind=="BrolySkillStart" then
+  if state then state.BrolySkill=data;skillStateAt=os.clock() end
+  startBroly(false)
  elseif kind=="Training" then
-  if state then state.Strength=data.Strength;state.ClickGain=data.ClickGain;state.SellValue=data.SellValue;trainingHud() end
+  if state then state.Strength=data.Strength;state.ClickGain=data.ClickGain;state.SellValue=data.SellValue;if data.BrolySkill then state.BrolySkill=data.BrolySkill;skillStateAt=os.clock() end;trainingHud() end
   if data.Gain&gt;0 then floating("+"..data.Gain.." POWER",palette.Gold) end;Polish.Train(p.Character,state and state.Equipped);sound("Click",1.15)
  elseif kind=="OpenMenu" then open(data)
  elseif kind=="Toast" then notify(data)
@@ -1675,12 +1720,12 @@ Event.OnClientEvent:Connect(function(kind,data)
  end
 end)
 Input.InputBegan:Connect(function(input,processed)
- if titleActive then return end
+ if titleActive or (brolyScene and brolyScene:IsPlaying()) then return end
  if not processed and input.KeyCode==Enum.KeyCode.F8 then open("Admin");return end
  if input.KeyCode==Enum.KeyCode.Escape and page then closeMenu();return end
  if processed or page or revealing or Input:GetFocusedTextBox() then return end
  if input.UserInputType==Enum.UserInputType.MouseButton1 or input.UserInputType==Enum.UserInputType.Touch then train();return end
- if input.KeyCode==Enum.KeyCode.F then train() end
+ if input.KeyCode==Enum.KeyCode.F then train() elseif input.KeyCode==Enum.KeyCode.G then activateBroly() end
 end)
 -- Entering a starter-pack area opens its menu once; leave and re-enter to reopen.
 local shownPrompts={}
@@ -1698,7 +1743,7 @@ Run.RenderStepped:Connect(function()
  for layer,spacing in pairs(movingPatterns) do
   if layer.Parent then layer.Position=UDim2.fromOffset((now*C.UI.StudSlideSpeed)%spacing-spacing,0) else movingPatterns[layer]=nil end
  end
- if not (summonScene and summonScene:IsPlaying()) then
+ if not ((summonScene and summonScene:IsPlaying()) or (brolyScene and brolyScene:IsPlaying())) then
  for view,spin in pairs(spinningPreviews) do
   if view.Parent and spin.Model.Parent then
    if spin.Idle then
@@ -1719,6 +1764,22 @@ Run.RenderStepped:Connect(function()
   if not buffIcon.Visible then buffTip.Visible=false end
   if state.Lucky and time==0 then state.Lucky=false; if page then render() end end
  end
+ if state then
+  local skill=state.BrolySkill
+  rageButton.Visible=state.Equipped=="broly" and (state.Characters.broly or 0)&gt;0 and not revealing
+  if skill then
+   local elapsed=os.clock()-skillStateAt
+   local charge=math.max(0,skill.ChargeRemaining-elapsed)
+   local boost=math.max(0,skill.ActiveRemaining-elapsed)
+   local cooldown=math.max(0,skill.CooldownRemaining-elapsed)
+   rageButton.Label.Text=skill.Charging and charge&gt;0 and ("CHARGING • "..math.ceil(charge).."s") or skill.Active and boost&gt;0 and ("3x POWER • "..math.ceil(boost).."s") or cooldown&gt;0 and ("RAGE • "..math.ceil(cooldown).."s") or "LEGENDARY RAGE [G]"
+   local needsState=(skill.Charging and charge&lt;=0) or (skill.Active and boost&lt;=0) or (not skill.Available and skill.Eligible and cooldown&lt;=0)
+   if needsState and not busy and os.clock()&gt;=skillRefreshAt then
+    skillRefreshAt=os.clock()+1
+    task.spawn(function() local r=call("State");if r and r.State then apply(r.State) end end)
+   end
+  end
+ else rageButton.Visible=false end
  dim.Visible=window.Visible and not revealing
  trainButton.Visible=state~=nil and not window.Visible and not revealing
  progressTrack.Visible=trainButton.Visible
@@ -1741,6 +1802,7 @@ local function bindCamera(character)
 end
 p.CharacterAdded:Connect(function(character)
  if summonScene then summonScene:Cancel("Respawn") end
+ if brolyScene then brolyScene:Cancel("Respawn") end
  task.spawn(bindCamera,character)
 end)
 if p.Character then task.spawn(bindCamera,p.Character) end
@@ -1801,6 +1863,7 @@ relayout=function()
  reveal.Position=portrait and UDim2.fromOffset(65,380) or UDim2.fromOffset(285,210)
  buffIcon.Position=portrait and UDim2.fromOffset(680,70) or UDim2.fromOffset(1121,671)
  buffTip.Position=portrait and UDim2.fromOffset(470,112) or UDim2.fromOffset(947,633)
+ rageButton.Position=portrait and UDim2.fromOffset(540,260) or UDim2.fromOffset(1002,490)
  adminButton.Position=portrait and UDim2.fromOffset(540,16) or UDim2.fromOffset(1004,610)
 end
 resize()
@@ -2194,6 +2257,8 @@ titleScreen=TitleScreen.Mount({
 C.Title = "ANIME RIFT"
 -- YOUR CUSTOMIZATION HUB: IDs, economy, artwork, sounds, and staff permissions.
 C.Admin = {OwnerUserId=2531251234,UserIds={1},StudioEnabled=true,Cooldown=8,Duration=15,CoinGift=250,GemGift=25}
+-- Broly's session skill: server times and rewards, optional uploaded skill audio.
+C.BrolySkill={Windup=26,Duration=20,Multiplier=3,Cooldown=90,SoundId="rbxassetid://119358500041991"}
 C.UI = {RevealShakeSeconds=1.6,WheelSeconds=4,SoundVolume=0.35,StudSlideSpeed=7,RevealSpinSpeed=35}
 C.Sounds = {
 	Click="rbxassetid://12221976",
@@ -72102,6 +72167,251 @@ function T.Mount(ctx)
  return controller
 end
 return T
+</ProtectedString></Properties></Item><Item class="ModuleScript" referent="RBX_RIFT_MODULE_BrolyPose"><Properties><string name="Name">BrolyPose</string><ProtectedString name="Source">-- Pose a bounded anchored viewport rig, keeping welded visual pieces with their limbs.
+local P={}
+function P.Bind(actor)
+ local core={Torso=actor:FindFirstChild("Torso") or actor:FindFirstChild("Body"),Head=actor:FindFirstChild("Head")}
+ for _,part in ipairs(actor:GetDescendants()) do
+  if part:IsA("BasePart") then
+   for _,side in ipairs({"Left","Right"}) do
+    if part.Name==side.." Arm" then core[side.." Arm"]=part end
+    if part.Name==side.." Leg" then core[side.." Leg"]=part end
+   end
+   if part.Name=="Arm" then core[part.CFrame.Position.X&lt;0 and "Left Arm" or "Right Arm"]=part end
+   if part.Name=="Leg" then core[part.CFrame.Position.X&lt;0 and "Left Leg" or "Right Leg"]=part end
+  end
+ end
+ if not core.Torso or not core.Head then return function() end end
+ local bases,groups,parts={},{},{}
+ for name,part in pairs(core) do bases[name]=part.CFrame;groups[part]=name end
+ local all=actor:GetDescendants()
+ for _=1,3 do for _,joint in ipairs(all) do
+  if (joint:IsA("WeldConstraint") or joint:IsA("Weld")) and joint.Part0 and joint.Part1 then
+   if groups[joint.Part0] and not groups[joint.Part1] then groups[joint.Part1]=groups[joint.Part0] end
+  end
+ end end
+ for _,part in ipairs(all) do if part:IsA("BasePart") then
+  local group=groups[part]
+  if not group then
+   local distance=math.huge
+   for name,base in pairs(bases) do local d=(base.Position-part.CFrame.Position).Magnitude;if d&lt;distance then distance=d;group=name end end
+  end
+  table.insert(parts,{Part=part,Group=group,Offset=bases[group]:ToObjectSpace(part.CFrame)})
+ end end
+ return function(sample)
+  local torso=bases.Torso*CFrame.new(0,sample.RootY,0)*CFrame.Angles(sample.Lean,0,0)
+  local posed={Torso=torso,Head=torso*bases.Torso:ToObjectSpace(bases.Head)*CFrame.Angles(sample.Head,0,0)}
+  for _,side in ipairs({-1,1}) do
+   local name=side&lt;0 and "Left" or "Right"
+   local arm=core[name.." Arm"];local leg=core[name.." Leg"]
+   if arm then
+    local shoulderY=core.Torso.Size.Y/2-.2
+    posed[name.." Arm"]=torso*CFrame.new(side*core.Torso.Size.X/2,shoulderY,0)*CFrame.Angles(-sample.Arm,0,side*sample.Spread)*CFrame.new(side*arm.Size.X/2,-shoulderY,0)
+   end
+   if leg then posed[name.." Leg"]=torso*CFrame.new(side*core.Torso.Size.X/4,-core.Torso.Size.Y/2,0)*CFrame.Angles(sample.Leg,0,side*sample.Energy*.08)*CFrame.new(0,-leg.Size.Y/2,0) end
+  end
+  for _,entry in ipairs(parts) do if entry.Part.Parent then entry.Part.CFrame=(posed[entry.Group] or torso)*entry.Offset end end
+ end
+end
+return P
+</ProtectedString></Properties></Item><Item class="ModuleScript" referent="RBX_RIFT_MODULE_BrolySequence"><Properties><string name="Name">BrolySequence</string><ProtectedString name="Source">-- Reconstructed Legendary Rage presentation; viewport-only, one actor and fixed FX pools.
+local B={}
+local Run=game:GetService("RunService")
+local Input=game:GetService("UserInputService")
+local Actions=game:GetService("ContextActionService")
+local Timeline=require(script.Parent:WaitForChild("BrolyTimeline"))
+local Pose=require(script.Parent:WaitForChild("BrolyPose"))
+B.Budget={MaxFX=96,FPS=30,ReducedFPS=24}
+local active
+local warmed={}
+function B.Preload(soundId)
+ if not soundId or soundId=="" or warmed[soundId] then return end
+ warmed[soundId]=true
+ task.spawn(function()
+  local ok=pcall(function() game:GetService("ContentProvider"):PreloadAsync({soundId}) end)
+  if not ok then warn("Broly skill audio preload failed; verify experience audio permissions in Studio.") end
+ end)
+end
+function B.Play(ctx)
+ if active then active:Cancel("Replaced") end
+ local clock=ctx.Clock or os.clock;local start=clock();local done=false
+ local connections={};local ui;local audio;local count=0
+ local controls,disabledControls
+ local reduced=Input.TouchEnabled==true or ctx.ReducedEffects==true
+ local controller={Metrics={FX=0,FPS=reduced and 24 or 30,Duration=Timeline.Duration}}
+ local function make(class,parent)
+  assert(count&lt;B.Budget.MaxFX,"Broly FX budget exceeded")
+  local item=Instance.new(class);item.Parent=parent;count+=1;controller.Metrics.FX=count;return item
+ end
+ local function finish(reason,destroying)
+  if done then return end;done=true
+  for _,connection in ipairs(connections) do connection:Disconnect() end
+  if audio then audio:Destroy() end
+  Actions:UnbindAction("RiftBrolySequence")
+  if disabledControls and controls then controls:Enable();disabledControls=false end
+  if ui and not destroying then ui:Destroy() end
+  if active==controller then active=nil end
+  if ctx.OnComplete then local ok,err=pcall(ctx.OnComplete,reason);if not ok then warn(tostring(err)) end end
+ end
+ function controller:Cancel(reason) finish(reason or "Skipped") end
+ function controller:IsPlaying() return not done end
+ active=controller
+ local ok,err=xpcall(function()
+  ui=make("ScreenGui",ctx.Parent);ui.Name="BrolyRageSequence";ui.IgnoreGuiInset=true;ui.ResetOnSpawn=false;ui.DisplayOrder=80
+  local root=make("CanvasGroup",ui);root.Size=UDim2.fromScale(1,1);root.BackgroundColor3=Color3.new(1,1,1);root.BackgroundTransparency=1;root.Active=true
+  local bg=make("Frame",root);bg.Size=UDim2.fromScale(1,1);bg.BackgroundColor3=Color3.fromRGB(43,92,67);bg.BorderSizePixel=0
+  local gradient=make("UIGradient",bg);gradient.Color=ColorSequence.new(Color3.fromRGB(38,73,72),Color3.fromRGB(80,132,90));gradient.Rotation=90
+  local view=ctx.Portrait(root,"broly",UDim2.new(),UDim2.fromScale(1,1),"Skill")
+  assert(view and view.CurrentCamera,"Missing Broly preview")
+  view.ZIndex=2;view.LightColor=Color3.new(1,1,1);view.Ambient=Color3.fromRGB(218,231,221);view.LightDirection=Vector3.new(-1,-1,-1)
+  local world=view:FindFirstChildOfClass("WorldModel");local actor=world and world:FindFirstChildOfClass("Model");assert(actor,"Missing Broly actor")
+  local pose=Pose.Bind(actor)
+  local fx=make("Model",world);fx.Name="LegendaryRageFX"
+  local green=Color3.fromRGB(104,255,49);local yellow=Color3.fromRGB(235,255,119)
+  local function part(name,size,tint,material)
+   local p=make("Part",fx);p.Name=name;p.Size=size;p.Anchored=true;p.CanCollide=false;p.CanTouch=false;p.CanQuery=false;p.Color=tint;p.Material=material or Enum.Material.Neon;p.Transparency=1;return p
+  end
+  local ground=part("Rage stage",Vector3.new(65,.4,65),Color3.fromRGB(82,97,91),Enum.Material.Slate);ground.CFrame=CFrame.new(0,-3.3,0);ground.Transparency=0
+  local moon=part("Orbit moon",Vector3.new(20,20,2),Color3.fromRGB(232,255,245));moon.Shape=Enum.PartType.Ball
+  local bubble=part("Energy sphere",Vector3.one,green);bubble.Shape=Enum.PartType.Ball
+  local pillars,rocks,bolts,rings,sparks={},{},{},{},{}
+  for i=1,(reduced and 4 or 7) do table.insert(pillars,part("Green energy pillar",Vector3.one,i%2==0 and yellow or green)) end
+  for i=1,(reduced and 5 or 10) do table.insert(rocks,part("Floating debris",Vector3.one,Color3.fromRGB(52,66,55),Enum.Material.Slate)) end
+  for i=1,(reduced and 4 or 8) do table.insert(bolts,part("Rage lightning",Vector3.new(.08,3,.08),yellow)) end
+  for ring=1,(reduced and 1 or 2) do
+   local segments={}
+   for i=1,12 do table.insert(segments,part("Cyclone ring",Vector3.one,ring==1 and green or yellow)) end
+   table.insert(rings,segments)
+  end
+  for i=1,(reduced and 8 or 14) do table.insert(sparks,part("Aura spark",Vector3.new(.12,.12,.12),Color3.fromRGB(217,255,206))) end
+  local function text(value,size,y)
+   local label=make("TextLabel",root);label.Position=UDim2.new(0,15,0,y);label.Size=UDim2.new(1,-30,0,35);label.BackgroundTransparency=1;label.Font=Enum.Font.FredokaOne;label.TextSize=size;label.TextColor3=Color3.new(1,1,1);label.TextStrokeTransparency=.1;label.Text=value;label.ZIndex=5;return label
+  end
+  text("LEGENDARY RAGE",25,18)
+  local phase=text("",17,56)
+  local skip=make("TextButton",root);skip.Name="SkipBrolySkill";skip.AnchorPoint=Vector2.new(1,1);skip.Position=UDim2.new(1,-20,1,-18);skip.Size=UDim2.fromOffset(230,42);skip.BackgroundColor3=Color3.fromRGB(26,45,36);skip.TextColor3=Color3.new(1,1,1);skip.Font=Enum.Font.GothamBold;skip.TextSize=14;skip.Text="SKIP VISUALS [SPACE/B]";skip.Modal=true;skip.Selectable=true;skip.ZIndex=6
+  local hint=text(ctx.Preview and "PREVIEW ONLY • NO BOOST" or "Power charges on the server even if visuals are skipped",15,94)
+  Actions:BindActionAtPriority("RiftBrolySequence",function() return Enum.ContextActionResult.Sink end,false,3000,Enum.PlayerActions.CharacterForward,Enum.PlayerActions.CharacterBackward,Enum.PlayerActions.CharacterLeft,Enum.PlayerActions.CharacterRight,Enum.PlayerActions.CharacterJump)
+  if ctx.Player then task.spawn(function()
+   local got,result=pcall(function()
+    local scripts=ctx.Player:WaitForChild("PlayerScripts",10);local module=scripts and scripts:WaitForChild("PlayerModule",10)
+    return module and require(module):GetControls()
+   end)
+   if got and result and not done then controls=result;controls:Disable();disabledControls=true end
+  end) end
+  local soundId=ctx.SoundId or ""
+  if soundId~="" then
+   audio=Instance.new("Sound");audio.Name="BrolyLegendaryRageAudio";audio.PlayOnRemove=false;audio.SoundId=soundId;audio.Volume=.55;audio.Looped=false;audio.Parent=game:GetService("SoundService");audio:Play()
+  end
+  table.insert(connections,skip.Activated:Connect(function() finish("Skipped") end))
+  table.insert(connections,Input.InputBegan:Connect(function(input,processed) if not processed and (input.KeyCode==Enum.KeyCode.Space or input.KeyCode==Enum.KeyCode.ButtonB) then finish("Skipped") end end))
+  table.insert(connections,ui.Destroying:Connect(function() finish("Closed",true) end))
+  local humanoid=ctx.Character and ctx.Character:FindFirstChildOfClass("Humanoid")
+  if humanoid then table.insert(connections,humanoid.Died:Connect(function() finish("Died") end)) end
+  local last=-math.huge
+  local function update(now)
+   local t=math.max(0,now-start)
+   if t&gt;=Timeline.Duration then finish("Completed");return end
+   local s=Timeline.Sample(t);pose(s)
+   phase.Text=s.Phase;hint.Text=ctx.Preview and "PREVIEW ONLY • NO BOOST" or string.format("POWER CHARGING • %ds",math.ceil(Timeline.Duration-t))
+   local camera=s.Camera
+   view.CurrentCamera.CFrame=CFrame.lookAt(Vector3.new(camera.X,camera.Y+s.RootY*.5,camera.Z),Vector3.new(camera.TX,camera.TY+s.RootY*.5,camera.TZ));view.CurrentCamera.FieldOfView=camera.FOV
+   local energy=s.Energy
+   ground.Transparency=s.Moon*.98
+   local dx,dy,dz=camera.TX-camera.X,camera.TY-camera.Y,camera.TZ-camera.Z
+   local length=math.max(.1,math.sqrt(dx*dx+dy*dy+dz*dz))
+   moon.CFrame=CFrame.lookAt(Vector3.new(camera.TX+dx/length*9,camera.TY+s.RootY*.5+dy/length*9,camera.TZ+dz/length*9),Vector3.new(camera.X,camera.Y+s.RootY*.5,camera.Z));moon.Transparency=1-s.Moon*.9
+   local sphereSize=5+energy*14
+   bubble.Size=Vector3.new(sphereSize,sphereSize,sphereSize);bubble.CFrame=CFrame.new(0,s.RootY,0);bubble.Transparency=.98-energy*.12
+   for i,p in ipairs(pillars) do
+    local angle=i/#pillars*math.pi*2+t*.28
+    local radius=1.9+i%3*.7;local height=5+s.Pillar*(17+i%3*4)
+    p.Size=Vector3.new(.3+i%3*.3,height,.3+i%2*.4);p.CFrame=CFrame.new(math.cos(angle)*radius,height/2-3,math.sin(angle)*radius)*CFrame.Angles(0,angle,math.sin(t+i)*.08)
+    p.Transparency=1-s.Pillar*(.22+i%2*.16)
+   end
+   for i,p in ipairs(rocks) do
+    local angle=i/#rocks*math.pi*2+t*(.2+i%3*.09)
+    local radius=3.5+i%3*1.4;local size=.4+i%3*.3
+    p.Size=Vector3.new(size,size*.8,size);p.CFrame=CFrame.new(math.cos(angle)*radius,-2.6+energy*(2+i%4)+math.sin(t+i)*.2,math.sin(angle)*radius)*CFrame.Angles(t*.3+i,t*.2,i)
+    p.Transparency=1-energy*.95
+   end
+   for i,p in ipairs(bolts) do
+    local angle=i/#bolts*math.pi*2+math.floor(t*8)*.34
+    p.CFrame=CFrame.new(math.cos(angle)*2,s.RootY+math.sin(t*4+i)*2,math.sin(angle)*2)*CFrame.Angles(.3*math.sin(t*9+i),0,math.sin(t*7+i)*.7)
+    p.Transparency=1-energy*.8
+   end
+   for index,segments in ipairs(rings) do
+    local radius=2.6+index*1.1+energy*.8
+    for i,p in ipairs(segments) do
+     local angle=(i-.5)/#segments*math.pi*2+s.Orbit*.8+index*.5
+     p.Size=Vector3.new(.08,.08,2*radius*math.sin(math.pi/#segments)*1.05)
+     p.CFrame=CFrame.new(math.cos(angle)*radius,s.RootY-1+index*1.2+math.sin(angle+t)*.25,math.sin(angle)*radius)*CFrame.Angles(0,-angle,0)
+     p.Transparency=1-energy*.75
+    end
+   end
+   for i,p in ipairs(sparks) do
+    local angle=i*2.399+t*.3;local cycle=(t*.23+i/#sparks)%1;local radius=2+cycle*5
+    p.CFrame=CFrame.new(math.cos(angle)*radius,cycle*11-3,math.sin(angle)*radius);p.Transparency=1-energy*(1-math.abs(cycle-.5))* .8
+   end
+   root.GroupTransparency=math.max(1-math.min(1,t/.22),math.max(0,(t-25.5)/.5))
+  end
+  table.insert(connections,Run.RenderStepped:Connect(function()
+   if done then return end
+   local now=clock();if now-last&lt;1/controller.Metrics.FPS then return end;last=now
+   local frameOK,frameError=pcall(update,now);if not frameOK then warn("Broly sequence: "..tostring(frameError));finish("Error") end
+  end))
+  update(start)
+ end,debug.traceback)
+ if not ok then warn("Broly sequence setup: "..tostring(err));finish("Error") end
+ return controller
+end
+return B
+</ProtectedString></Properties></Item><Item class="ModuleScript" referent="RBX_RIFT_MODULE_BrolyTimeline"><Properties><string name="Name">BrolyTimeline</string><ProtectedString name="Source">-- Legendary Rage: 26 seconds of local cinematic direction, with no engine services.
+-- Pose order: RootY, Lean, Head, Arm, Spread, Leg, Energy, Pillar, Moon, Orbit.
+-- Camera order: X, Y, Z, TX, TY, TZ, FOV. All rotations are radians.
+local T={Duration=26}
+local tau=math.pi*2
+local keys={
+ {0,"Confident",{0,0,.08,.06,.12,.04,.10,0,0,0},{.9,1.7,-2.2,0,1.5,0,43}},
+ {1.2,"Confident",{0,0,.10,.08,.14,.04,.13,0,0,0},{1.05,1.7,-2.1,0,1.5,0,42}},
+ {1.5,"SideTurn",{0,.04,.12,.12,.18,.05,.18,0,0,0},{2.6,1.9,-1.4,0,1.4,0,47}},
+ {2.5,"LowBrace",{0,-.13,-.25,-.50,.30,.16,.36,0,0,0},{1.3,.25,-4,0,1,0,55}},
+ {3.5,"ExplosiveFlare",{0,-.24,-.38,-.85,.42,.24,.76,.12,0,0},{4,2.5,-7,0,1.2,0,63}},
+ {3.8,"ExplosiveFlare",{.25,-.28,.38,-.95,.52,.27,1,.58,0,0},{9,7,-16,0,2,0,77}},
+ {5.5,"BowedFocus",{.08,-.12,-.65,-.60,.24,.15,.52,.08,0,0},{.8,1.5,-2.1,0,1.5,0,43}},
+ {7,"SphereBuildup",{0,-.08,-.38,-.72,.34,.18,.58,.06,0,0},{9,7,-16,0,2,0,64}},
+ {8.7,"SphereBuildup",{.12,-.06,-.20,-.85,.48,.22,.92,.18,0,0},{10,7.5,-18,0,2,0,69}},
+ {10,"TorsoClose",{.15,-.08,-.28,-.85,.36,.18,.74,.08,0,0},{.6,.7,-2.8,0,.6,0,46}},
+ {11.3,"FistClose",{.18,-.12,-.15,-1.28,.18,.20,.86,.18,0,0},{2,0,-1.7,.9,-.2,0,43}},
+ {12.5,"PillarAscent",{.4,-.04,.15,-.65,.70,.24,.84,.48,0,0},{12,10,-26,0,4,0,72}},
+ {12.8,"PillarAscent",{1.2,0,.42,-.42,.95,.26,1,1,.08,0},{12,10,-26,0,4,0,78}},
+ {15,"MoonOrbit",{2,.02,.20,-.08,1.35,.12,.76,.60,.30,0},{9,7,-16,0,2,0,65}},
+ {16.2,"MoonOrbit",{2,.03,.12,-.04,1.43,.10,.86,.42,.68,.90},{-6,5,-5,0,2,0,63}},
+ {17.5,"MoonOrbit",{2,0,.05,-.10,1.50,.12,1,.30,1,3.1},{0,13,-.2,0,2,0,69}},
+ {18.8,"MoonOrbit",{2,-.02,-.08,-.28,1.12,.14,.84,.25,.82,5.3},{-6,5,-5,0,2,0,62}},
+ {19.5,"Cyclone",{2,-.08,-.20,-.62,.72,.16,.78,.20,.45,tau},{1,.9,-3.5,0,1.1,0,49}},
+ {21,"Cyclone",{1.9,-.15,-.30,-.90,.60,.18,.86,.24,.28,tau},{-1.6,1.3,-4.2,0,1,0,54}},
+ {22.5,"Settling",{1.5,-.06,-.10,-.30,.40,.14,.56,.10,.12,tau},{5,4,-9,0,1.5,0,59}},
+ {24,"Landing",{0,-.18,-.25,-.45,.25,.30,.30,0,0,tau},{7,3,-14,0,.8,0,61}},
+ {26,"Landing",{0,0,.02,.03,.10,.04,.10,0,0,tau},{7,3,-14,0,1,0,60}},
+}
+local poseFields={"RootY","Lean","Head","Arm","Spread","Leg","Energy","Pillar","Moon","Orbit"}
+local cameraFields={"X","Y","Z","TX","TY","TZ","FOV"}
+function T.Sample(time)
+ local t=tonumber(time) or 0
+ if t~=t then t=0 end
+ t=math.clamp(t,0,T.Duration)
+ local index=1
+ while index&lt;#keys and keys[index+1][1]&lt;=t do index+=1 end
+ local a,b=keys[index],keys[math.min(index+1,#keys)]
+ local alpha=b[1]&gt;a[1] and (t-a[1])/(b[1]-a[1]) or 0
+ alpha=alpha*alpha*(3-2*alpha)
+ local result={Phase=a[2],Camera={}}
+ for i,field in ipairs(poseFields) do result[field]=a[3][i]+(b[3][i]-a[3][i])*alpha end
+ for i,field in ipairs(cameraFields) do result.Camera[field]=a[4][i]+(b[4][i]-a[4][i])*alpha end
+ return result
+end
+return T
 </ProtectedString></Properties></Item><Item class="ModuleScript" referent="RBX_RIFT_MODULE_Polish"><Properties><string name="Name">Polish</string><ProtectedString name="Source">-- Cosmetic client effects only. No currency, damage, or inventory changes here.
 local P={}
 local Run=game:GetService("RunService")
@@ -72905,14 +73215,16 @@ local W=require(script.Parent.World).Build()
 local A=require(script.Parent.Avatars)
 local Clicker=require(script.Parent.Clicker)
 local Admin=require(script.Parent.Admin)
+local Rage=require(script.Parent.BrolySkill).new(C.BrolySkill,os.clock)
 local policies,limits,working,training={},{},{},{}
 local rng=Random.new()
 local function send(p,kind,data) if p.Parent==Players then event:FireClient(p,kind,data) end end
 local function allowed(p) return policies[p]==true or (Run:IsStudio() and C.StudioMemory) end
 local function lucky(p,d) return allowed(p) and d.LuckUntil&gt;os.time() end
+local function clickGain(p,d) return C.ClickGain(d.Equipped,d.Rebirths,d.Aura)*Rage:Multiplier(p,d) end
 local function state(p)
  local d=P.Cache[p]; if not d then return nil end
- return {Strength=P.Strength(p),ClickGain=C.ClickGain(d.Equipped,d.Rebirths,d.Aura),SellValue=P.Strength(p)*C.Clicker.SellRate,Rebirths=d.Rebirths,RebirthCost=C.RebirthCost(d.Rebirths),Coins=d.Coins,Gems=d.Gems,Tickets=d.Tickets,Boosted=d.Boosted,Characters=d.Characters,Cosmetics=d.Cosmetics,Equipped=d.Equipped,Aura=d.Aura,Wins=d.Wins,LuckUntil=d.LuckUntil,Lucky=lucky(p,d),PaidAllowed=allowed(p),WheelReady=d.WheelDay&lt;math.floor(os.time()/86400),ServerTime=os.time(),Studio=Run:IsStudio(),IsOwner=Admin.IsOwner(p),IsAdmin=Admin.Allowed(p)}
+ return {Strength=P.Strength(p),ClickGain=clickGain(p,d),BrolySkill=Rage:State(p,d),SellValue=P.Strength(p)*C.Clicker.SellRate,Rebirths=d.Rebirths,RebirthCost=C.RebirthCost(d.Rebirths),Coins=d.Coins,Gems=d.Gems,Tickets=d.Tickets,Boosted=d.Boosted,Characters=d.Characters,Cosmetics=d.Cosmetics,Equipped=d.Equipped,Aura=d.Aura,Wins=d.Wins,LuckUntil=d.LuckUntil,Lucky=lucky(p,d),PaidAllowed=allowed(p),WheelReady=d.WheelDay&lt;math.floor(os.time()/86400),ServerTime=os.time(),Studio=Run:IsStudio(),IsOwner=Admin.IsOwner(p),IsAdmin=Admin.Allowed(p)}
 end
 local function sync(p) send(p,"State",state(p)) end
 local function edit(p,fn)
@@ -72948,20 +73260,26 @@ local function join(p)
 end
 Players.PlayerAdded:Connect(join)
 for _,p in ipairs(Players:GetPlayers()) do task.spawn(join,p) end
-Players.PlayerRemoving:Connect(function(p) P.Close(p); policies[p]=nil; limits[p]=nil; working[p]=nil;training[p]=nil; Admin.Last[p.UserId]=nil end)
+Players.PlayerRemoving:Connect(function(p) Rage:Clear(p);P.Close(p); policies[p]=nil; limits[p]=nil; working[p]=nil;training[p]=nil; Admin.Last[p.UserId]=nil end)
 local function handle(p,action,arg)
  local d=P.Cache[p]
  if action=="State" then return {Ok=true,State=state(p)} end
  if P.Closing[p] then return {Ok=false,Message="Your progress is being saved."} end
  if action=="Admin" then return Admin.Execute(p,arg,P,sync,send) end
+ if action=="BrolySkill" then
+  local result=Rage:Activate(p,d)
+  if result.Ok then send(p,"BrolySkillStart",result.State);sync(p) end
+  return result
+ end
  if action=="Train" then
   local now=os.clock()
   if now-(training[p] or -math.huge)&lt;C.Training.Interval then return {Ok=false} end
   local h=p.Character and p.Character:FindFirstChildOfClass("Humanoid")
   if not h or h.Health&lt;=0 then return {Ok=false,Message="Wait for your character to spawn."} end
+  if Rage:State(p,d).Charging then return {Ok=false,Message="Legendary Rage is still charging."} end
   training[p]=now
-  local gain=P.Train(p,C.ClickGain(d.Equipped,d.Rebirths,d.Aura))
-  send(p,"Training",{Gain=gain,Strength=P.Strength(p),ClickGain=C.ClickGain(d.Equipped,d.Rebirths,d.Aura),SellValue=P.Strength(p)*C.Clicker.SellRate})
+  local gain=P.Train(p,clickGain(p,d))
+  send(p,"Training",{Gain=gain,Strength=P.Strength(p),ClickGain=clickGain(p,d),BrolySkill=Rage:State(p,d),SellValue=P.Strength(p)*C.Clicker.SellRate})
   return {Ok=true}
  end
  if action=="Home" then
@@ -73313,6 +73631,70 @@ function K.Apply(action,d)
  return {Ok=false,Message="Unknown clicker action."}
 end
 return K
+</ProtectedString></Properties></Item><Item class="ModuleScript" referent="RBX_RIFT_SERVER_BrolySkill"><Properties><string name="Name">BrolySkill</string><ProtectedString name="Source">-- Session-only server authority for Legendary Rage. Visuals never grant the bonus.
+local S={}
+function S.new(config,clock)
+ clock=clock or os.clock
+ local slots={}
+ local self={}
+ local function stop(record)
+  record.Cancelled=true
+  for _,connection in ipairs(record.Connections) do connection:Disconnect() end
+  record.Connections={};record.Character=nil
+ end
+ local function eligible(player,data)
+  if not data or data.Equipped~="broly" or (data.Characters.broly or 0)&lt;1 then return false end
+  local character=player.Character
+  local h=character and character:FindFirstChildOfClass("Humanoid")
+  return h~=nil and h.Health&gt;0
+ end
+ function self:State(player,data)
+  local now=clock();local record=slots[player]
+  local canUse=eligible(player,data)
+  if record and not record.Cancelled then
+   if not canUse or player.Character~=record.Character or now&gt;=record.BuffEnd then stop(record) end
+  end
+  if record and now&gt;=record.ReadyAt then
+   if not record.Cancelled then stop(record) end
+   slots[player]=nil;record=nil
+  end
+  local live=record and not record.Cancelled
+  local charging=live and now&lt;record.ChargeEnd or false
+  local active=live and now&gt;=record.ChargeEnd and now&lt;record.BuffEnd or false
+  local cooldown=record and math.max(0,record.ReadyAt-now) or 0
+  return {
+   Available=canUse and cooldown&lt;=0,Eligible=canUse,
+   Charging=charging,Active=active,
+   Multiplier=active and config.Multiplier or 1,
+   ChargeRemaining=charging and math.max(0,record.ChargeEnd-now) or 0,
+   ActiveRemaining=active and math.max(0,record.BuffEnd-now) or 0,
+   CooldownRemaining=cooldown,
+  }
+ end
+ function self:Activate(player,data)
+  local current=self:State(player,data)
+  if not current.Eligible then return {Ok=false,Message="Equip an owned Broly and wait for your character to spawn.",State=current} end
+  if not current.Available then return {Ok=false,Message="Legendary Rage is on cooldown.",State=current} end
+  local now=clock();local character=player.Character
+  local record={Character=character,ChargeEnd=now+config.Windup,BuffEnd=now+config.Windup+config.Duration,ReadyAt=now+config.Cooldown,Connections={},Cancelled=false}
+  slots[player]=record
+  local h=character:FindFirstChildOfClass("Humanoid")
+  if h.Died and h.Died.Connect then table.insert(record.Connections,h.Died:Connect(function() stop(record) end)) end
+  if player.GetPropertyChangedSignal then
+   table.insert(record.Connections,player:GetPropertyChangedSignal("Character"):Connect(function()
+    if player.Character~=record.Character then stop(record) end
+   end))
+  end
+  return {Ok=true,Message="Legendary Rage is charging!",State=self:State(player,data)}
+ end
+ function self:Multiplier(player,data) return self:State(player,data).Multiplier end
+ function self:Clear(player)
+  local record=slots[player];if record then stop(record) end
+  slots[player]=nil
+ end
+ return self
+end
+return S
 </ProtectedString></Properties></Item></Item>
 	<Item class="ServerStorage" referent="RBXEDD4BE5083E44EB79BD68A0300B7D72F">
 		<Properties>

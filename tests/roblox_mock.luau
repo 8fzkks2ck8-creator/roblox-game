@@ -6,7 +6,20 @@ function V.__sub(a,b) return Vector3.new(a.X-b.X,a.Y-b.Y,a.Z-b.Z) end
 Vector3={new=function(x,y,z) return setmetatable({X=x or 0,Y=y or 0,Z=z or 0,_type="Vector3"},V) end}
 Vector3.zero=Vector3.new();Vector3.one=Vector3.new(1,1,1)
 Vector2={new=function(x,y) return {_type="Vector2",X=x,Y=y} end,zero={_type="Vector2",X=0,Y=0}}
-local F={};F.__index=F
+local F={};F.__index=function(t,k)
+ if k=="Position" then return Vector3.new(t.X,t.Y,t.Z) end
+ if k=="Rotation" then local f=CFrame.new();f.R=table.clone(t.R);return f end
+ return F[k]
+end
+function F:Inverse()
+ local r=self.R
+ local f=CFrame.new();f.R={r[1],r[4],r[7],r[2],r[5],r[8],r[3],r[6],r[9]}
+ f.X=-(f.R[1]*self.X+f.R[2]*self.Y+f.R[3]*self.Z)
+ f.Y=-(f.R[4]*self.X+f.R[5]*self.Y+f.R[6]*self.Z)
+ f.Z=-(f.R[7]*self.X+f.R[8]*self.Y+f.R[9]*self.Z)
+ return f
+end
+function F:ToObjectSpace(other) return self:Inverse()*other end
 CFrame={new=function(x,y,z)
  if type(x)=="table" then x,y,z=x.X,x.Y,x.Z end
  return setmetatable({_type="CFrame",X=x or 0,Y=y or 0,Z=z or 0,R={1,0,0,0,1,0,0,0,1}},F)

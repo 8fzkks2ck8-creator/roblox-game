@@ -5,7 +5,7 @@ local repl=Instance.new("ReplicatedStorage")
 local sharedServer=Instance.new("Folder",repl);sharedServer.Name="AnimeRift"
 local configNode=Instance.new("ModuleScript",sharedServer);configNode.Name="Config"
 local scripts=Instance.new("ServerScriptService")
-for _,name in ipairs({"Profiles","World","Avatars","Admin","Clicker"}) do local item=Instance.new("ModuleScript",scripts);item.Name=name end
+for _,name in ipairs({"Profiles","World","Avatars","Admin","Clicker","BrolySkill"}) do local item=Instance.new("ModuleScript",scripts);item.Name=name end
 local serverScript=Instance.new("Script",scripts);serverScript.Name="Server"
 services.ReplicatedStorage=repl;game.ReplicatedStorage=repl
 services.Players=Instance.new("Players")
@@ -28,6 +28,7 @@ require=function(target)
  if target.Name=="Profiles" then return serverProfiles end
  if target.Name=="World" then return W end
  if target.Name=="Clicker" then return K end
+ if target.Name=="BrolySkill" then return loadstring(BROLY_SOURCE,"BrolySkill")() end
  if target.Name=="Avatars" then return {Init=function() end,Decorate=function() end} end
  if target.Name=="Admin" then return {Last={},IsOwner=function() return false end,Allowed=function() return false end,Execute=function() return {Ok=false} end} end
  error("Unexpected server module")
@@ -78,3 +79,18 @@ check(blocked.Name=="NotProcessedYet","purchase fulfillment waits when a profile
 serverProfiles.Closing[userServer]=nil;starter.Id=previousId
 
 check(requestServer("Home").Ok and userServer.Character.LastPivot==W.Spawn,"Base action returns the character to the clicking court")
+
+check(not requestServer("BrolySkill").Ok,"Broly skill remote rejects a different equipped fighter")
+serverProfiles.Change(userServer,function(d) d.Characters.broly=1;d.Equipped="broly" end)
+local skillStart=simulatedClock+.2
+local activation=requestServer("BrolySkill")
+check(activation.Ok and activation.State.Charging and requestServer("State").State.BrolySkill.Charging,"Broly skill remote starts authoritative charge")
+local powerBefore=serverProfiles.Strength(userServer)
+check(not requestServer("Train").Ok and serverProfiles.Strength(userServer)==powerBefore,"server rejects training during the Rage wind-up")
+check(not requestServer("BrolySkill").Ok,"Broly skill cannot be activated twice during cooldown")
+simulatedClock=skillStart+C.BrolySkill.Windup
+local baseGain=C.ClickGain("broly",serverProfiles.Cache[userServer].Rebirths,serverProfiles.Cache[userServer].Aura)
+check(requestServer("Train").Ok and serverProfiles.Strength(userServer)==powerBefore+baseGain*C.BrolySkill.Multiplier,"charged Rage multiplies actual server-granted click power")
+simulatedClock=skillStart+C.BrolySkill.Windup+C.BrolySkill.Duration
+powerBefore=serverProfiles.Strength(userServer)
+check(requestServer("Train").Ok and serverProfiles.Strength(userServer)==powerBefore+baseGain,"Rage bonus expires on the server")

@@ -14,6 +14,7 @@ local TitleScreen=require(folder:WaitForChild("TitleScreen"))
 local OutfitDetails=require(folder:WaitForChild("OutfitDetails"))
 local IdleMotion=require(folder:WaitForChild("IdleMotion"))
 local SummonCinematics=require(folder:WaitForChild("SummonCinematics"))
+local BrolySequence=require(folder:WaitForChild("BrolySequence"))
 local Request=folder:WaitForChild("Request"); local Event=folder:WaitForChild("Event")
 local ui=Instance.new("ScreenGui"); ui.Name="AnimeRiftUI"; ui.ResetOnSpawn=false; ui.ZIndexBehavior=Enum.ZIndexBehavior.Sibling; ui.Parent=p:WaitForChild("PlayerGui")
 local canvas=Instance.new("Frame",ui); canvas.Size=UDim2.fromOffset(1200,760); canvas.AnchorPoint=Vector2.new(0.5,0.5); canvas.Position=UDim2.fromScale(0.5,0.5); canvas.BackgroundTransparency=1
@@ -45,6 +46,10 @@ local loadingStarted=os.clock()
 local apply
 local revealing=false
 local summonScene
+local brolyScene
+local startBroly
+local skillStateAt=0
+local skillRefreshAt=0
 local revealSerial=0
 local wheelSpinning=false
 local wheelButton
@@ -135,6 +140,7 @@ local function notify(text)
 end
 local function call(action,arg)
  if titleActive and action~="State" then return end
+ if brolyScene and brolyScene:IsPlaying() and action~="State" then return end
  if revealing and action~="State" then notify("Finish your character reveal first."); return end
  if busy then if action~="State" and action~="Train" then notify("Finishing your previous action...") end; return end
  if folder:GetAttribute("ServerStatus")=="Error" then
@@ -220,7 +226,7 @@ local function action(text,color,fn)
  rowNumber=rowNumber+1; local b=button(list,text,contentWidth,52,color,fn); b.LayoutOrder=rowNumber; return b
 end
 open=function(name)
- if titleActive then return end
+ if titleActive or (brolyScene and brolyScene:IsPlaying()) then return end
  if revealing then return end
  menuSerial+=1;page=name; window.Visible=true;dim.Visible=true; sound("Open",0.85); render()
  window.Position=modalPosition+UDim2.fromOffset(0,18); Tween:Create(window,TweenInfo.new(0.25,Enum.EasingStyle.Back),{Position=modalPosition}):Play()
@@ -293,12 +299,17 @@ local goalText=label(canvas,"Click to collect power\nSell power for coins\nSummo
 local practice=button(canvas,"REBIRTH BONUSES",205,43,palette.Mint,function() open("Rebirth") end);practice.Position=UDim2.fromOffset(10,520)
 local lastTrain=-math.huge
 local function train()
- if titleActive then return end
+ if titleActive or (brolyScene and brolyScene:IsPlaying()) then return end
  if not state or page or window.Visible or revealing or Input:GetFocusedTextBox() then return end
  if os.clock()-lastTrain<C.Training.Interval then return end
  lastTrain=os.clock();call("Train")
 end
 local trainButton=button(canvas,"CLICK TO TRAIN",310,60,palette.Gold,train);trainButton.Position=UDim2.fromOffset(445,530)
+local function activateBroly()
+ if titleActive or revealing or not state or state.Equipped~="broly" then return end
+ call("BrolySkill")
+end
+local rageButton=button(canvas,"LEGENDARY RAGE [G]",185,76,palette.Mint,activateBroly);rageButton.Name="BrolySkillButton";rageButton.Visible=false;rageButton.Label.TextSize=20
 local strengthLabel=label(canvas,"POWER 0",UDim2.fromOffset(420,32),UDim2.fromOffset(390,495),24,palette.Gold)
 local progressTrack=panel(canvas,Vector2.new(500,16),Vector2.new(350,608),palette.Ink,false)
 local progressFill=Instance.new("Frame",progressTrack);progressFill.Size=UDim2.fromScale(0,1);progressFill.BackgroundColor3=palette.Mint;progressFill.BorderSizePixel=0;corner(progressFill,8);gradient(progressFill,palette.Mint)
@@ -333,28 +344,32 @@ local buffTip=label(canvas,"2x luck • boosts Rare+ odds",UDim2.fromOffset(240,
 buffIcon.MouseEnter:Connect(function() buffTip.Visible=buffIcon.Visible end)
 buffIcon.MouseLeave:Connect(function() buffTip.Visible=false end)
 local function portrait(parent,id,pos,size,spin)
- local lightweight=spin=="Cinematic" or spin=="Light"
+ local lightweight=spin=="Cinematic" or spin=="Light" or spin=="Skill"
  local outfit=C.Outfits[id]
  local view=Instance.new("ViewportFrame",parent); view.Position=pos; view.Size=size; view.BackgroundTransparency=1; view.LightColor=Color3.new(1,1,1); view.Ambient=Color3.fromRGB(195,195,195); view.ZIndex=2
  local camera=Instance.new("Camera",view); camera.CFrame=CFrame.lookAt(Vector3.new(3,2,-7),Vector3.new(0,0.4,0)); camera.FieldOfView=34; view.CurrentCamera=camera
  local assets=folder:FindFirstChild("Assets");local models=assets and assets:FindFirstChild("CharacterModels");local custom=models and models:FindFirstChild(id)
+ if spin=="Skill" and state and state.Equipped=="broly" and p.Character then custom=p.Character end
  if custom and custom:IsA("Model") and lightweight then
   local descendants=custom:GetDescendants();local parts=0
   for _,item in ipairs(descendants) do if item:IsA("BasePart") then parts+=1 end end
   if #descendants>SummonCinematics.Budget.MaxPreviewDescendants or parts>SummonCinematics.Budget.MaxPreviewParts or parts==0 then custom=nil end
  end
  if custom and custom:IsA("Model") then
-  local wm=Instance.new("WorldModel",view);local display=custom:Clone()
+  local wm=Instance.new("WorldModel",view)
+  local archivable=custom.Archivable;custom.Archivable=true
+  local cloned,display=pcall(function() return custom:Clone() end);custom.Archivable=archivable
+  if not cloned or not display then error("Character preview could not be cloned") end
   local descendants=display:GetDescendants()
   for index=#descendants,1,-1 do
    local v=descendants[index]
-   if v:IsA("LuaSourceContainer") or (lightweight and (v:IsA("ParticleEmitter") or v:IsA("Trail") or v:IsA("Beam") or v:IsA("Light") or v:IsA("Sound"))) then v:Destroy()
+   if v:IsA("LuaSourceContainer") or (lightweight and (v:IsA("ParticleEmitter") or v:IsA("Trail") or v:IsA("Beam") or v:IsA("Light") or v:IsA("Sound") or v:IsA("LayerCollector"))) then v:Destroy()
    elseif v:IsA("BasePart") then v.Anchored=true;v.CanCollide=false;v.CanTouch=false end
   end
   display.Parent=wm;display:PivotTo(CFrame.new())
   local cf,sz=display:GetBoundingBox();local distance=math.max(sz.X,sz.Y,sz.Z)*2
   camera.CFrame=CFrame.lookAt(cf.Position+Vector3.new(distance*0.35,sz.Y*0.12,-distance),cf.Position)
-  if spin~="Cinematic" then spinningPreviews[view]={Model=display,Base=display:GetPivot(),Started=os.clock(),Idle=spin~=true,Id=id} end
+  if spin~="Cinematic" and spin~="Skill" then spinningPreviews[view]={Model=display,Base=display:GetPivot(),Started=os.clock(),Idle=spin~=true,Id=id} end
   return view
  end
  if not outfit then outfit=C.Outfits.yamcha end
@@ -372,7 +387,7 @@ local function portrait(parent,id,pos,size,spin)
   for i=-2,2 do local hair=block("Hair",Vector3.new(0.25,0.5,0.8),Vector3.new(i*0.2,2,0),outfit.Hair); hair.Rotation=Vector3.new(0,0,-i*12) end
  end
  OutfitDetails.Apply(display,outfit,display,true)
- if spin~="Cinematic" then spinningPreviews[view]={Model=display,Base=display:GetPivot(),Started=os.clock(),Idle=spin~=true,Id=id} end
+ if spin~="Cinematic" and spin~="Skill" then spinningPreviews[view]={Model=display,Base=display:GetPivot(),Started=os.clock(),Idle=spin~=true,Id=id} end
  return view
 end
 renderInventory=function()
@@ -524,6 +539,7 @@ render=function()
  elseif page=="Cutscenes" then
   if not (state.Studio or state.IsAdmin) then row("Cutscene previews are available in Studio or to admins.",65);return end
   row("LOCAL CUTSCENE PREVIEWS\nNo coins, tickets or fighters are granted. Skip any scene, then close its preview card to watch another.",85)
+  action("PREVIEW BROLY SKILL • NO BOOST",palette.Mint,function() startBroly(true) end)
   for _,hero in ipairs(C.Characters) do
    if hero.Tier>=5 then action("PREVIEW • "..hero.Name,hero.Color,function() playReveal({Kind="Character",Id=hero.Id,Preview=true}) end) end
   end
@@ -591,6 +607,7 @@ local done=button(reveal,"KEEP IT!",220,36,palette.Mint,function()
  if #revealQueue>0 then local nextItem=table.remove(revealQueue,1);playReveal(nextItem) end
 end);done.Position=UDim2.fromOffset(205,316)
 playReveal=function(data)
+ if brolyScene and brolyScene:IsPlaying() then table.insert(revealQueue,data);return end
  if revealing then table.insert(revealQueue,data);return end
  local item=C.Find(data.Kind=="Character" and C.Characters or C.Cosmetics,data.Id)
  if not item then notify("Unknown reward. Reopen inventory to refresh.");return end
@@ -654,6 +671,29 @@ playReveal=function(data)
   rewardCard()
  end)
 end
+startBroly=function(preview)
+ if titleActive or revealing or (brolyScene and brolyScene:IsPlaying()) then return end
+ local focused=Input:GetFocusedTextBox();if focused then focused:ReleaseFocus() end
+ canvas.Visible=false
+ local result=BrolySequence.Play({Player=p,Parent=p:WaitForChild("PlayerGui"),Portrait=portrait,Preview=preview,SoundId=C.BrolySkill.SoundId,Character=p.Character,
+  OnComplete=function(reason)
+   brolyScene=nil;canvas.Visible=not titleActive
+   if not preview then
+    if reason=="Completed" and C.BrolySkill.SoundId=="" then characterSummonSound("broly") end
+    task.spawn(function()
+     local r=call("State")
+     if r and r.State then
+      apply(r.State)
+      if reason=="Completed" and r.State.BrolySkill and r.State.BrolySkill.Active then notify("LEGENDARY RAGE • 3x click power is active!") end
+     end
+    end)
+    if reason=="Skipped" then notify("Visuals skipped. The server charge timer still applies.") end
+   end
+   if #revealQueue>0 and not revealing then playReveal(table.remove(revealQueue,1)) end
+  end,
+ })
+ if result and result:IsPlaying() then brolyScene=result end
+end
 local eventSerial=0
 local function party(data)
  eventSerial=eventSerial+1;local serial=eventSerial;notify(data.Text);sound("Reward",1.1)
@@ -671,7 +711,9 @@ local function party(data)
  end)
 end
 apply=function(s)
- if not s then return end; state=s;if titleScreen then titleScreen:Refresh() end;Polish.Aura(p.Character,s.Aura); offset=s.ServerTime-os.time()
+ if not s then return end; state=s;skillStateAt=os.clock();
+ if s.Equipped=="broly" then BrolySequence.Preload(C.BrolySkill.SoundId) end
+if titleScreen then titleScreen:Refresh() end;Polish.Aura(p.Character,s.Aura); offset=s.ServerTime-os.time()
  if coinTween then coinTween:Cancel() end;if gemTween then gemTween:Cancel() end
  coinTween=Tween:Create(coinCounter,TweenInfo.new(.28,Enum.EasingStyle.Quad),{Value=s.Coins});coinTween:Play()
  gemTween=Tween:Create(gemCounter,TweenInfo.new(.28,Enum.EasingStyle.Quad),{Value=s.Gems});gemTween:Play();winsLabel.Text=(s.Rebirths or 0).." REBIRTHS"
@@ -682,8 +724,11 @@ apply=function(s)
 end
 Event.OnClientEvent:Connect(function(kind,data)
  if kind=="State" then apply(data)
+ elseif kind=="BrolySkillStart" then
+  if state then state.BrolySkill=data;skillStateAt=os.clock() end
+  startBroly(false)
  elseif kind=="Training" then
-  if state then state.Strength=data.Strength;state.ClickGain=data.ClickGain;state.SellValue=data.SellValue;trainingHud() end
+  if state then state.Strength=data.Strength;state.ClickGain=data.ClickGain;state.SellValue=data.SellValue;if data.BrolySkill then state.BrolySkill=data.BrolySkill;skillStateAt=os.clock() end;trainingHud() end
   if data.Gain>0 then floating("+"..data.Gain.." POWER",palette.Gold) end;Polish.Train(p.Character,state and state.Equipped);sound("Click",1.15)
  elseif kind=="OpenMenu" then open(data)
  elseif kind=="Toast" then notify(data)
@@ -709,12 +754,12 @@ Event.OnClientEvent:Connect(function(kind,data)
  end
 end)
 Input.InputBegan:Connect(function(input,processed)
- if titleActive then return end
+ if titleActive or (brolyScene and brolyScene:IsPlaying()) then return end
  if not processed and input.KeyCode==Enum.KeyCode.F8 then open("Admin");return end
  if input.KeyCode==Enum.KeyCode.Escape and page then closeMenu();return end
  if processed or page or revealing or Input:GetFocusedTextBox() then return end
  if input.UserInputType==Enum.UserInputType.MouseButton1 or input.UserInputType==Enum.UserInputType.Touch then train();return end
- if input.KeyCode==Enum.KeyCode.F then train() end
+ if input.KeyCode==Enum.KeyCode.F then train() elseif input.KeyCode==Enum.KeyCode.G then activateBroly() end
 end)
 -- Entering a starter-pack area opens its menu once; leave and re-enter to reopen.
 local shownPrompts={}
@@ -732,7 +777,7 @@ Run.RenderStepped:Connect(function()
  for layer,spacing in pairs(movingPatterns) do
   if layer.Parent then layer.Position=UDim2.fromOffset((now*C.UI.StudSlideSpeed)%spacing-spacing,0) else movingPatterns[layer]=nil end
  end
- if not (summonScene and summonScene:IsPlaying()) then
+ if not ((summonScene and summonScene:IsPlaying()) or (brolyScene and brolyScene:IsPlaying())) then
  for view,spin in pairs(spinningPreviews) do
   if view.Parent and spin.Model.Parent then
    if spin.Idle then
@@ -753,6 +798,22 @@ Run.RenderStepped:Connect(function()
   if not buffIcon.Visible then buffTip.Visible=false end
   if state.Lucky and time==0 then state.Lucky=false; if page then render() end end
  end
+ if state then
+  local skill=state.BrolySkill
+  rageButton.Visible=state.Equipped=="broly" and (state.Characters.broly or 0)>0 and not revealing
+  if skill then
+   local elapsed=os.clock()-skillStateAt
+   local charge=math.max(0,skill.ChargeRemaining-elapsed)
+   local boost=math.max(0,skill.ActiveRemaining-elapsed)
+   local cooldown=math.max(0,skill.CooldownRemaining-elapsed)
+   rageButton.Label.Text=skill.Charging and charge>0 and ("CHARGING • "..math.ceil(charge).."s") or skill.Active and boost>0 and ("3x POWER • "..math.ceil(boost).."s") or cooldown>0 and ("RAGE • "..math.ceil(cooldown).."s") or "LEGENDARY RAGE [G]"
+   local needsState=(skill.Charging and charge<=0) or (skill.Active and boost<=0) or (not skill.Available and skill.Eligible and cooldown<=0)
+   if needsState and not busy and os.clock()>=skillRefreshAt then
+    skillRefreshAt=os.clock()+1
+    task.spawn(function() local r=call("State");if r and r.State then apply(r.State) end end)
+   end
+  end
+ else rageButton.Visible=false end
  dim.Visible=window.Visible and not revealing
  trainButton.Visible=state~=nil and not window.Visible and not revealing
  progressTrack.Visible=trainButton.Visible
@@ -775,6 +836,7 @@ local function bindCamera(character)
 end
 p.CharacterAdded:Connect(function(character)
  if summonScene then summonScene:Cancel("Respawn") end
+ if brolyScene then brolyScene:Cancel("Respawn") end
  task.spawn(bindCamera,character)
 end)
 if p.Character then task.spawn(bindCamera,p.Character) end
@@ -835,6 +897,7 @@ relayout=function()
  reveal.Position=portrait and UDim2.fromOffset(65,380) or UDim2.fromOffset(285,210)
  buffIcon.Position=portrait and UDim2.fromOffset(680,70) or UDim2.fromOffset(1121,671)
  buffTip.Position=portrait and UDim2.fromOffset(470,112) or UDim2.fromOffset(947,633)
+ rageButton.Position=portrait and UDim2.fromOffset(540,260) or UDim2.fromOffset(1002,490)
  adminButton.Position=portrait and UDim2.fromOffset(540,16) or UDim2.fromOffset(1004,610)
 end
 resize()

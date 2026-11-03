@@ -15,14 +15,16 @@ local W=require(script.Parent.World).Build()
 local A=require(script.Parent.Avatars)
 local Clicker=require(script.Parent.Clicker)
 local Admin=require(script.Parent.Admin)
+local Rage=require(script.Parent.BrolySkill).new(C.BrolySkill,os.clock)
 local policies,limits,working,training={},{},{},{}
 local rng=Random.new()
 local function send(p,kind,data) if p.Parent==Players then event:FireClient(p,kind,data) end end
 local function allowed(p) return policies[p]==true or (Run:IsStudio() and C.StudioMemory) end
 local function lucky(p,d) return allowed(p) and d.LuckUntil>os.time() end
+local function clickGain(p,d) return C.ClickGain(d.Equipped,d.Rebirths,d.Aura)*Rage:Multiplier(p,d) end
 local function state(p)
  local d=P.Cache[p]; if not d then return nil end
- return {Strength=P.Strength(p),ClickGain=C.ClickGain(d.Equipped,d.Rebirths,d.Aura),SellValue=P.Strength(p)*C.Clicker.SellRate,Rebirths=d.Rebirths,RebirthCost=C.RebirthCost(d.Rebirths),Coins=d.Coins,Gems=d.Gems,Tickets=d.Tickets,Boosted=d.Boosted,Characters=d.Characters,Cosmetics=d.Cosmetics,Equipped=d.Equipped,Aura=d.Aura,Wins=d.Wins,LuckUntil=d.LuckUntil,Lucky=lucky(p,d),PaidAllowed=allowed(p),WheelReady=d.WheelDay<math.floor(os.time()/86400),ServerTime=os.time(),Studio=Run:IsStudio(),IsOwner=Admin.IsOwner(p),IsAdmin=Admin.Allowed(p)}
+ return {Strength=P.Strength(p),ClickGain=clickGain(p,d),BrolySkill=Rage:State(p,d),SellValue=P.Strength(p)*C.Clicker.SellRate,Rebirths=d.Rebirths,RebirthCost=C.RebirthCost(d.Rebirths),Coins=d.Coins,Gems=d.Gems,Tickets=d.Tickets,Boosted=d.Boosted,Characters=d.Characters,Cosmetics=d.Cosmetics,Equipped=d.Equipped,Aura=d.Aura,Wins=d.Wins,LuckUntil=d.LuckUntil,Lucky=lucky(p,d),PaidAllowed=allowed(p),WheelReady=d.WheelDay<math.floor(os.time()/86400),ServerTime=os.time(),Studio=Run:IsStudio(),IsOwner=Admin.IsOwner(p),IsAdmin=Admin.Allowed(p)}
 end
 local function sync(p) send(p,"State",state(p)) end
 local function edit(p,fn)
@@ -58,20 +60,26 @@ local function join(p)
 end
 Players.PlayerAdded:Connect(join)
 for _,p in ipairs(Players:GetPlayers()) do task.spawn(join,p) end
-Players.PlayerRemoving:Connect(function(p) P.Close(p); policies[p]=nil; limits[p]=nil; working[p]=nil;training[p]=nil; Admin.Last[p.UserId]=nil end)
+Players.PlayerRemoving:Connect(function(p) Rage:Clear(p);P.Close(p); policies[p]=nil; limits[p]=nil; working[p]=nil;training[p]=nil; Admin.Last[p.UserId]=nil end)
 local function handle(p,action,arg)
  local d=P.Cache[p]
  if action=="State" then return {Ok=true,State=state(p)} end
  if P.Closing[p] then return {Ok=false,Message="Your progress is being saved."} end
  if action=="Admin" then return Admin.Execute(p,arg,P,sync,send) end
+ if action=="BrolySkill" then
+  local result=Rage:Activate(p,d)
+  if result.Ok then send(p,"BrolySkillStart",result.State);sync(p) end
+  return result
+ end
  if action=="Train" then
   local now=os.clock()
   if now-(training[p] or -math.huge)<C.Training.Interval then return {Ok=false} end
   local h=p.Character and p.Character:FindFirstChildOfClass("Humanoid")
   if not h or h.Health<=0 then return {Ok=false,Message="Wait for your character to spawn."} end
+  if Rage:State(p,d).Charging then return {Ok=false,Message="Legendary Rage is still charging."} end
   training[p]=now
-  local gain=P.Train(p,C.ClickGain(d.Equipped,d.Rebirths,d.Aura))
-  send(p,"Training",{Gain=gain,Strength=P.Strength(p),ClickGain=C.ClickGain(d.Equipped,d.Rebirths,d.Aura),SellValue=P.Strength(p)*C.Clicker.SellRate})
+  local gain=P.Train(p,clickGain(p,d))
+  send(p,"Training",{Gain=gain,Strength=P.Strength(p),ClickGain=clickGain(p,d),BrolySkill=Rage:State(p,d),SellValue=P.Strength(p)*C.Clicker.SellRate})
   return {Ok=true}
  end
  if action=="Home" then

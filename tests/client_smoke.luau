@@ -81,7 +81,7 @@ local delays={}
 task.delay=function(seconds,fn) table.insert(delays,{Seconds=seconds,Fn=fn}) end
 local rs=Instance.new("ReplicatedStorage")
 local shared=Instance.new("Folder",rs);shared.Name="AnimeRift";shared:SetAttribute("ServerStatus","Ready")
-for _,name in ipairs({"Config","Polish","ClientLayout","TitleScreen","OutfitDetails","IdleMotion","SummonCinematics"}) do local module=Instance.new("ModuleScript",shared);module.Name=name end
+for _,name in ipairs({"Config","Polish","ClientLayout","TitleScreen","OutfitDetails","IdleMotion","SummonCinematics","BrolySequence"}) do local module=Instance.new("ModuleScript",shared);module.Name=name end
 local request=Instance.new("RemoteFunction",shared);request.Name="Request"
 local events=Instance.new("RemoteEvent",shared);events.Name="Event"
 local user=Instance.new("Player");user.UserId=123
@@ -100,13 +100,18 @@ workspace.CurrentCamera=Instance.new("Camera");workspace.CurrentCamera.ViewportS
 local cineChunk=loadstring(CINEMATICS_SOURCE,"SummonCinematics")
 setfenv(cineChunk,setmetatable({script={Parent={WaitForChild=function() return CutscenePresets end}},require=function() return CutscenePresets end},{__index=getfenv()}))
 local cinematicModule=cineChunk()
+local rageTimeline=loadstring(RAGE_TIMELINE_SOURCE,"BrolyTimeline")()
+local ragePose=loadstring(RAGE_POSE_SOURCE,"BrolyPose")()
+local rageChunk=loadstring(RAGE_SCENE_SOURCE,"BrolySequence")
+setfenv(rageChunk,setmetatable({script={Parent={WaitForChild=function(_,name) return name end}},require=function(name) return name=="BrolyTimeline" and rageTimeline or ragePose end},{__index=getfenv()}))
+local rageSequence=rageChunk()
 local titleModule=loadstring(TITLE_SOURCE,"TitleScreen")()
 local idleModule=loadstring(IDLE_SOURCE,"IdleMotion")()
 function methods:GetPivot() return CFrame.new() end
 local detailsModule=loadstring(DETAILS_SOURCE,"OutfitDetails")()
 local polishStub={Aura=function() end,ClearGuard=function() end,Train=function() end,Pulse=function() end,Guard=function() end}
 require=function(target)
- if target.Name=="SummonCinematics" then return cinematicModule elseif target.Name=="IdleMotion" then return idleModule elseif target.Name=="TitleScreen" then return titleModule elseif target.Name=="OutfitDetails" then return detailsModule elseif target.Name=="Config" then return C elseif target.Name=="Polish" then return polishStub elseif target.Name=="ClientLayout" then return L end
+ if target.Name=="BrolySequence" then return rageSequence elseif target.Name=="SummonCinematics" then return cinematicModule elseif target.Name=="IdleMotion" then return idleModule elseif target.Name=="TitleScreen" then return titleModule elseif target.Name=="OutfitDetails" then return detailsModule elseif target.Name=="Config" then return C elseif target.Name=="Polish" then return polishStub elseif target.Name=="ClientLayout" then return L end
  error("Unexpected require")
 end
 loadstring(CLIENT_SOURCE,"Client")()
