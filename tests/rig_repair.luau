@@ -57,3 +57,14 @@ local text=fs.readFile("assets/AnimeRift.original.rbxlx"):gsub("^<%?xml.-%?>%s*"
 local original=roblox.deserializePlace(text)
 local models=original:FindFirstChild("ReplicatedStorage").AnimeRift.Assets.CharacterModels
 for _,rig in models:GetChildren() do if rig:IsA("Model") then test(rig) end end
+
+local clothed=Instance.new("Model");clothed.Name="R15 classic clothing carrier"
+for _,name in {"UpperTorso","LeftUpperArm","RightUpperLeg","Head"} do local p=Instance.new("Part");p.Name=name;p.Size=Vector3.new(1,2,1);p.Parent=clothed end
+local shirt=Instance.new("Shirt");shirt.ShirtTemplate="rbxassetid://123";shirt.Parent=clothed
+local pants=Instance.new("Pants");pants.PantsTemplate="rbxassetid://456";pants.Parent=clothed
+local fixed=test(clothed)
+assert(fixed:FindFirstChildOfClass("Shirt").ShirtTemplate=="rbxassetid://123")
+assert(fixed:FindFirstChildOfClass("Pants").PantsTemplate=="rbxassetid://456")
+assert(fixed.Torso.Transparency==0 and fixed["Right Leg"].Transparency==0)
+assert(fixed.RiftVisualSkin.UpperTorso.Transparency==1)
+print("PASS classic clothing stays on visible R6 body parts")

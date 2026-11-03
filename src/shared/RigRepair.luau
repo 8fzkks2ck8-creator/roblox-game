@@ -75,6 +75,23 @@ function R.Prepare(template)
   for _,name in ipairs(names) do
    local p=Instance.new("Part");p.Name=name;local o=offsets[name];p.CFrame=CFrame.new(o[1],o[2],o[3]);p.Size=(name:find("Arm") or name:find("Leg")) and Vector3.new(1,2,1) or name=="Head" and Vector3.new(2,1,1) or Vector3.new(2,2,1);p.Transparency=1;p.Parent=model;core[name]=p
   end
+  -- Classic clothing renders on the Humanoid's direct R6 body, not a nested visual model.
+  local shirt,pants,graphic=false,false,false
+  for _,item in ipairs(original:GetDescendants()) do
+   if item:IsA("Shirt") then shirt=true;item.Parent=model
+   elseif item:IsA("Pants") then pants=true;item.Parent=model
+   elseif item:IsA("ShirtGraphic") then graphic=true;item.Parent=model
+   elseif item:IsA("BodyColors") then item.Parent=model end
+  end
+  local clothed={Torso=shirt or pants or graphic,["Right Arm"]=shirt,["Left Arm"]=shirt,["Right Leg"]=pants,["Left Leg"]=pants}
+  for _,part in ipairs(original:GetDescendants()) do
+   if part:IsA("BasePart") then
+    local group=bodyGroup(part)
+    if group and clothed[group] then
+     core[group].Transparency=0;core[group].Color=part.Color;part.Transparency=1
+    end
+   end
+  end
   original.Name="RiftVisualSkin";original.Parent=model
  end
  local previousHumanoid=model:FindFirstChildOfClass("Humanoid");if previousHumanoid then previousHumanoid:Destroy() end

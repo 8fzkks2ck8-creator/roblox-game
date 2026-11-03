@@ -76,3 +76,5 @@ serverProfiles.Closing[userServer]=true
 local blocked=services.MarketplaceService.ProcessReceipt({PlayerId=555,ProductId=12345,PurchaseId="receipt-clicker-2"})
 check(blocked.Name=="NotProcessedYet","purchase fulfillment waits when a profile is closing")
 serverProfiles.Closing[userServer]=nil;starter.Id=previousId
+
+check(requestServer("Home").Ok and userServer.Character.LastPivot==W.Spawn,"Base action returns the character to the clicking court")

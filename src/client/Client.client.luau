@@ -127,7 +127,7 @@ local toast=panel(canvas,Vector2.new(900,40),Vector2.new(150,-65),palette.Panel,
 local toastText=label(toast,"",UDim2.new(1,-20,1,0),UDim2.fromOffset(10,0),22,palette.Mint)
 local function notify(text)
  toastSerial=toastSerial+1; local serial=toastSerial; toastText.Text=text; toast.Visible=true; toast.Position=UDim2.new(.5,0,0,-65)
- Tween:Create(toast,TweenInfo.new(0.35,Enum.EasingStyle.Back),{Position=UDim2.new(.5,0,0,metrics.Portrait and 215 or 78)}):Play()
+ Tween:Create(toast,TweenInfo.new(0.35,Enum.EasingStyle.Back),{Position=UDim2.new(.5,0,0,metrics.Portrait and 255 or 78)}):Play()
  task.delay(4,function() if toastSerial==serial then Tween:Create(toast,TweenInfo.new(0.2),{Position=UDim2.new(.5,0,0,-65)}):Play(); task.wait(0.2); if toastSerial==serial then toast.Visible=false end end end)
 end
 local function call(action,arg)
@@ -228,7 +228,7 @@ local function icon(parent,kind,color)
  local assets=folder:FindFirstChild("Assets")
  local icons=assets and assets:FindFirstChild("GUIIcons")
  local pack=assets and assets:FindFirstChild("UIMegaPack")
- local mapping={Shop="Shop",Summon="Luck",Inventory="Inventory",Cosmetics="Super Gem's",Wheel="WheelSpin",Codes="Code's"}
+ local mapping={Shop="Shop",Summon="Luck",Inventory="Inventory",Cosmetics="Super Gem's",Wheel="WheelSpin",Codes="Code's",Rebirth="Rebirth",Sell="Money"}
  local packed=pack and pack:FindFirstChild(mapping[kind] or kind)
  if packed and (packed:IsA("ImageButton") or packed:IsA("ImageLabel")) and packed.Image~="" then
   local image=Instance.new("ImageLabel",holder);image.Name="MegaPackIcon";image.BackgroundTransparency=1;image.Size=UDim2.fromScale(1,1);image.Image=packed.Image;image.ImageRectOffset=packed.ImageRectOffset;image.ImageRectSize=packed.ImageRectSize;image.ScaleType=Enum.ScaleType.Fit;return
@@ -270,18 +270,18 @@ local function icon(parent,kind,color)
  end
 end
 local bottomNav={}
-local nav={{"SHOP","Shop",palette.Pink},{"SUMMON","Summon",palette.Gold},{"FIGHTERS","Inventory",palette.Cyan},{"AURAS","Cosmetics",Color3.fromRGB(183,71,255)},{"WHEEL","Wheel",palette.Mint},{"CODES","Codes",Color3.fromRGB(255,153,43)}}
+local nav={{"SHOP","Shop",palette.Pink},{"SUMMON","Summon",palette.Gold},{"FIGHTERS","Inventory",palette.Cyan},{"AURAS","Cosmetics",Color3.fromRGB(183,71,255)},{"WHEEL","Wheel",palette.Mint},{"CODES","Codes",Color3.fromRGB(255,153,43)},{"REBIRTH","Rebirth",palette.Pink},{"SELL","Sell",palette.Mint}}
 for i,v in ipairs(nav) do
  local b=button(canvas,v[1],94,84,v[3],function() open(v[2]) end); b.Position=UDim2.fromOffset(285+(i-1)*105,666)
  table.insert(bottomNav,b)
  b.Label.Position=UDim2.fromOffset(0,56); b.Label.Size=UDim2.fromOffset(94,26); b.Label.TextSize=18
  icon(b,v[2],v[3])
 end
-local topSell=button(canvas,"SELL",220,54,palette.Gold,function() open("Sell") end); topSell.Position=UDim2.fromOffset(275,7); topSell.Label.TextSize=30; gleam(topSell,190,54)
-local topRebirth=button(canvas,"REBIRTH",220,54,palette.Mint,function() open("Rebirth") end);topRebirth.Position=UDim2.fromOffset(745,7);topRebirth.Label.TextSize=29;gleam(topRebirth,190,54)
+local topSell=button(canvas,"SELL POWER",220,54,palette.Gold,function() call("Sell") end); topSell.Position=UDim2.fromOffset(275,7); topSell.Label.TextSize=30; gleam(topSell,190,54)
+local topStore=button(canvas,"SHOP",220,54,palette.Mint,function() open("Shop") end);topStore.Position=UDim2.fromOffset(745,7);topStore.Label.TextSize=29;gleam(topStore,190,54)
 icon(topSell,"Money",palette.Gold);topSell.Label.Position=UDim2.fromOffset(70,0);topSell.Label.Size=UDim2.new(1,-74,1,-6);topSell.Label.TextSize=25
-icon(topRebirth,"Rebirth",palette.Pink);topRebirth.Label.Position=UDim2.fromOffset(70,0);topRebirth.Label.Size=UDim2.new(1,-74,1,-6);topRebirth.Label.TextSize=24
-local topFighters=button(canvas,"FIGHTERS",220,54,palette.Cyan,function() open("Inventory") end);topFighters.Position=UDim2.fromOffset(510,7);topFighters.Label.TextSize=28
+icon(topStore,"Shop",palette.Gold);topStore.Label.Position=UDim2.fromOffset(70,0);topStore.Label.Size=UDim2.new(1,-74,1,-6);topStore.Label.TextSize=24
+local topBase=button(canvas,"BASE",220,54,palette.Cyan,function() call("Home") end);topBase.Position=UDim2.fromOffset(510,7);topBase.Label.TextSize=28
 local shop=button(canvas,"STARTER PACK",205,110,palette.Gold,function() selectedProduct="Starter"; open("Shop") end); shop.Position=UDim2.fromOffset(10,240); shop.Label.Position=UDim2.fromOffset(6,3); shop.Label.Size=UDim2.fromOffset(193,30); shop.Label.TextXAlignment=Enum.TextXAlignment.Left
 label(shop,"Sasuke + 5 spins\n+ 1 boosted ticket",UDim2.fromOffset(190,43),UDim2.fromOffset(7,34),16)
 local packOpen=button(shop,"VIEW PACK",110,25,palette.Mint,function() selectedProduct="Starter"; open("Shop") end); packOpen.Position=UDim2.fromOffset(85,80); packOpen.Label.TextSize=16; gleam(shop,205,110)
@@ -381,7 +381,7 @@ renderInventory=function()
     portrait(card,item.Id,UDim2.fromOffset(6,8),UDim2.fromOffset(width-12,122))
     local count=label(card,"×"..state.Characters[item.Id],UDim2.fromOffset(width-8,24),UDim2.fromOffset(4,2),16);count.TextXAlignment=Enum.TextXAlignment.Right
     label(card,C.Rarities[item.Tier],UDim2.fromOffset(width-6,23),UDim2.fromOffset(3,124),17,item.Color:Lerp(palette.White,.6))
-    label(card,item.Name,UDim2.fromOffset(width-6,31),UDim2.fromOffset(3,145),18)
+    label(card,item.Name,UDim2.fromOffset(width-6,35),UDim2.fromOffset(3,145),17)
     local equipped=state.Equipped==item.Id
     local equip=button(strip,equipped and "Equipped" or "Equip",width,36,equipped and Color3.fromRGB(155,158,161) or palette.Mint,function() if not equipped then call("Equip",item.Id) end end)
     equip.Position=UDim2.fromOffset(column*(width+12),188);equip.Label.TextSize=22
@@ -753,19 +753,24 @@ relayout=function()
  recycleButton.Position=UDim2.fromOffset(32+bestW+unequipW+searchW,7);recycleButton.Size=UDim2.fromOffset(recycleW,44)
  toast.Size=UDim2.fromOffset(math.min(900,metrics.Width-24),48)
  logo.Position=UDim2.fromOffset(12,10)
- local tops={topSell,topFighters,topRebirth}
+ local tops={topSell,topBase,topStore}
  for i,b in ipairs(tops) do
-  b.Position=portrait and UDim2.fromOffset(12+(i-1)*248,154) or UDim2.fromOffset(275+(i-1)*235,7)
+  b.Position=portrait and UDim2.fromOffset(12+(i-1)*248,190) or UDim2.fromOffset(275+(i-1)*235,7)
   b.Size=UDim2.fromOffset(portrait and 240 or 220,54)
  end
  header.Position=portrait and UDim2.fromOffset(12,76) or UDim2.fromOffset(12,648)
- for i,b in ipairs(bottomNav) do b.Position=portrait and UDim2.fromOffset(18+(i-1)*124,1106) or UDim2.fromOffset(285+(i-1)*105,666);b.Size=UDim2.fromOffset(portrait and 104 or 94,84) end
- for _,item in ipairs({shop,quests,goalText,practice,luck,boost}) do item.Visible=not portrait end
- trainButton.Position=portrait and UDim2.fromOffset(140,936) or UDim2.fromOffset(445,530)
+ for i,b in ipairs(bottomNav) do
+  local column=(i-1)%2;local row=math.floor((i-1)/2)
+  b.Position=UDim2.fromOffset(12+column*(portrait and 114 or 106),(portrait and 300 or 260)+row*(portrait and 100 or 96));b.Size=UDim2.fromOffset(portrait and 100 or 94,84)
+ end
+ shop.Position=UDim2.fromOffset(10,122);shop.Visible=not portrait
+ for _,item in ipairs({quests,goalText,practice,luck,boost}) do item.Visible=false end
+ bottom.Visible=false
+ trainButton.Position=portrait and UDim2.fromOffset(140,1120) or UDim2.fromOffset(445,680)
  trainButton.Size=UDim2.fromOffset(portrait and 480 or 310,60)
- strengthLabel.Position=portrait and UDim2.fromOffset(80,890) or UDim2.fromOffset(330,495);strengthLabel.Size=UDim2.fromOffset(portrait and 600 or 540,34)
+ strengthLabel.Position=portrait and UDim2.fromOffset(80,1074) or UDim2.fromOffset(330,640);strengthLabel.Size=UDim2.fromOffset(portrait and 600 or 540,34)
  bottom.Position=portrait and UDim2.fromOffset(55,860) or UDim2.fromOffset(275,460)
- progressTrack.Position=portrait and UDim2.fromOffset(130,1020) or UDim2.fromOffset(350,608)
+ progressTrack.Position=portrait and UDim2.fromOffset(130,1020) or UDim2.fromOffset(350,596)
  status.Position=portrait and UDim2.fromOffset(20,224) or UDim2.fromOffset(240,78)
 
 

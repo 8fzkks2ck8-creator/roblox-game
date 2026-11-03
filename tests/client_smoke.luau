@@ -200,3 +200,19 @@ simulation.PreSimulation:Fire()
 check(idleNeck.C0~=idleBase,"procedural idle adds a tiny pose offset")
 stopIdle()
 check(idleNeck.C0==idleBase,"stopping an idle restores the original joint pose")
+
+-- Eight icon buttons form the side grid; the click control is the only bottom action.
+local sideButtons=0
+for _,item in ipairs(canvas:GetChildren()) do
+ if item:IsA("TextButton") and item:FindFirstChild("Label") then
+  local value=item.Label.Text
+  if value=="SHOP" or value=="SUMMON" or value=="FIGHTERS" or value=="AURAS" or value=="WHEEL" or value=="CODES" or value=="REBIRTH" or value=="SELL" then
+   if item.Position.X.Offset<230 and item.Position.Y.Offset>=260 and item.Position.Y.Offset<710 then sideButtons+=1 end
+  end
+ end
+end
+check(sideButtons==8,"main icon controls form an eight-button side grid")
+check(findButton("SELL POWER")~=nil and findButton("BASE")~=nil,"Sell Power and Base remain prominent at the top")
+local clickControl
+for _,item in ipairs(canvas:GetChildren()) do if item:IsA("TextButton") and item:FindFirstChild("Label") and item.Label.Text:find("CLICK +",1,true)==1 then clickControl=item end end
+check(clickControl and clickControl.Position.Y.Offset>=1100,"click button is at the bottom of the portrait HUD")

@@ -74,6 +74,11 @@ local function handle(p,action,arg)
   send(p,"Training",{Gain=gain,Strength=P.Strength(p),ClickGain=C.ClickGain(d.Equipped,d.Rebirths,d.Aura),SellValue=P.Strength(p)*C.Clicker.SellRate})
   return {Ok=true}
  end
+ if action=="Home" then
+  local character=p.Character;local humanoid=character and character:FindFirstChildOfClass("Humanoid")
+  if not character or not humanoid or humanoid.Health<=0 then return {Ok=false,Message="Wait for your character to spawn."} end
+  character:PivotTo(W.Spawn);return {Ok=true,Message="Returned to the clicking court."}
+ end
  if Clicker.Actions[action] then
   local result
   local ok,err=edit(p,function(data) result=Clicker.Apply(action,data,arg) end)
