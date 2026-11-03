@@ -979,6 +979,7 @@ local Layout=require(folder:WaitForChild("ClientLayout"))
 local TitleScreen=require(folder:WaitForChild("TitleScreen"))
 local OutfitDetails=require(folder:WaitForChild("OutfitDetails"))
 local IdleMotion=require(folder:WaitForChild("IdleMotion"))
+local SummonCinematics=require(folder:WaitForChild("SummonCinematics"))
 local Request=folder:WaitForChild("Request"); local Event=folder:WaitForChild("Event")
 local ui=Instance.new("ScreenGui"); ui.Name="AnimeRiftUI"; ui.ResetOnSpawn=false; ui.ZIndexBehavior=Enum.ZIndexBehavior.Sibling; ui.Parent=p:WaitForChild("PlayerGui")
 local canvas=Instance.new("Frame",ui); canvas.Size=UDim2.fromOffset(1200,760); canvas.AnchorPoint=Vector2.new(0.5,0.5); canvas.Position=UDim2.fromScale(0.5,0.5); canvas.BackgroundTransparency=1
@@ -1009,6 +1010,8 @@ local menuSerial=0
 local loadingStarted=os.clock()
 local apply
 local revealing=false
+local summonScene
+local revealSerial=0
 local wheelSpinning=false
 local wheelButton
 local revealQueue={}
@@ -1296,17 +1299,28 @@ local buffTip=label(canvas,"2x luck • boosts Rare+ odds",UDim2.fromOffset(240,
 buffIcon.MouseEnter:Connect(function() buffTip.Visible=buffIcon.Visible end)
 buffIcon.MouseLeave:Connect(function() buffTip.Visible=false end)
 local function portrait(parent,id,pos,size,spin)
+ local lightweight=spin=="Cinematic" or spin=="Light"
  local outfit=C.Outfits[id]
  local view=Instance.new("ViewportFrame",parent); view.Position=pos; view.Size=size; view.BackgroundTransparency=1; view.LightColor=Color3.new(1,1,1); view.Ambient=Color3.fromRGB(195,195,195); view.ZIndex=2
  local camera=Instance.new("Camera",view); camera.CFrame=CFrame.lookAt(Vector3.new(3,2,-7),Vector3.new(0,0.4,0)); camera.FieldOfView=34; view.CurrentCamera=camera
  local assets=folder:FindFirstChild("Assets");local models=assets and assets:FindFirstChild("CharacterModels");local custom=models and models:FindFirstChild(id)
+ if custom and custom:IsA("Model") and lightweight then
+  local descendants=custom:GetDescendants();local parts=0
+  for _,item in ipairs(descendants) do if item:IsA("BasePart") then parts+=1 end end
+  if #descendants&gt;SummonCinematics.Budget.MaxPreviewDescendants or parts&gt;SummonCinematics.Budget.MaxPreviewParts or parts==0 then custom=nil end
+ end
  if custom and custom:IsA("Model") then
   local wm=Instance.new("WorldModel",view);local display=custom:Clone()
-  for _,v in ipairs(display:GetDescendants()) do if v:IsA("LuaSourceContainer") then v:Destroy() elseif v:IsA("BasePart") then v.Anchored=true end end
+  local descendants=display:GetDescendants()
+  for index=#descendants,1,-1 do
+   local v=descendants[index]
+   if v:IsA("LuaSourceContainer") or (lightweight and (v:IsA("ParticleEmitter") or v:IsA("Trail") or v:IsA("Beam") or v:IsA("Light") or v:IsA("Sound"))) then v:Destroy()
+   elseif v:IsA("BasePart") then v.Anchored=true;v.CanCollide=false;v.CanTouch=false end
+  end
   display.Parent=wm;display:PivotTo(CFrame.new())
   local cf,sz=display:GetBoundingBox();local distance=math.max(sz.X,sz.Y,sz.Z)*2
   camera.CFrame=CFrame.lookAt(cf.Position+Vector3.new(distance*0.35,sz.Y*0.12,-distance),cf.Position)
-  spinningPreviews[view]={Model=display,Base=display:GetPivot(),Started=os.clock(),Idle=not spin,Id=id}
+  if spin~="Cinematic" then spinningPreviews[view]={Model=display,Base=display:GetPivot(),Started=os.clock(),Idle=spin~=true,Id=id} end
   return view
  end
  if not outfit then outfit=C.Outfits.yamcha end
@@ -1324,7 +1338,7 @@ local function portrait(parent,id,pos,size,spin)
   for i=-2,2 do local hair=block("Hair",Vector3.new(0.25,0.5,0.8),Vector3.new(i*0.2,2,0),outfit.Hair); hair.Rotation=Vector3.new(0,0,-i*12) end
  end
  OutfitDetails.Apply(display,outfit,display,true)
- spinningPreviews[view]={Model=display,Base=display:GetPivot(),Started=os.clock(),Idle=not spin,Id=id}
+ if spin~="Cinematic" then spinningPreviews[view]={Model=display,Base=display:GetPivot(),Started=os.clock(),Idle=spin~=true,Id=id} end
  return view
 end
 renderInventory=function()
@@ -1473,7 +1487,14 @@ render=function()
   row("2x luck doubles the actual probability of Rare and higher tiers. Standard Secret: 0.01% → 0.02%. Boosted Secret: 0.1% → 0.2%. Each tier splits equally between its rollable fighters. See the live per-fighter odds below; luck doubles Rare and higher tier odds.",90)
   odds(false,false); odds(false,true)
   if selectedProduct=="Luck" then row("Luck also applies to cosmetic rolls:",40); odds(true,false); odds(true,true) end
+ elseif page=="Cutscenes" then
+  if not (state.Studio or state.IsAdmin) then row("Cutscene previews are available in Studio or to admins.",65);return end
+  row("LOCAL CUTSCENE PREVIEWS\nNo coins, tickets or fighters are granted. Skip any scene, then close its preview card to watch another.",85)
+  for _,hero in ipairs(C.Characters) do
+   if hero.Tier&gt;=5 then action("PREVIEW • "..hero.Name,hero.Color,function() playReveal({Kind="Character",Id=hero.Id,Preview=true}) end) end
+  end
  elseif page=="Admin" then
+  if state.Studio or state.IsAdmin then action("PREVIEW SUMMON CUTSCENES • NO REWARDS",palette.Cyan,function() open("Cutscenes") end) end
   row("ADMIN PANEL • Your Roblox user ID: "..tostring(p.UserId).."\n"..(state.IsOwner and "OWNER VERIFIED • Character grants enabled" or state.IsAdmin and "EVENT ACCESS • Owner setup needed for character grants" or "READ-ONLY • This account has no admin permission"),80)
   if not state.IsOwner then
    row("Stop Play. In Explorer: ReplicatedStorage → AnimeRift → AdminSettings → OwnerUserId. Set Value to your numeric user ID above, then Play again. Live commands still require server permission.",100)
@@ -1531,43 +1552,71 @@ local revealName=label(reveal,"",UDim2.fromOffset(590,45),UDim2.fromOffset(20,24
 local revealSub=label(reveal,"",UDim2.fromOffset(590,30),UDim2.fromOffset(20,285),17,palette.White)
 local stage=Instance.new("Frame",reveal);stage.Size=UDim2.fromOffset(590,190);stage.Position=UDim2.fromOffset(20,52);stage.BackgroundTransparency=1
 local done=button(reveal,"KEEP IT!",220,36,palette.Mint,function()
- reveal.Visible=false;revealing=false;stopSummonSound()
+ revealSerial+=1;reveal.Visible=false;revealing=false;stopSummonSound()
  for _,v in ipairs(stage:GetChildren()) do v:Destroy() end
  if #revealQueue&gt;0 then local nextItem=table.remove(revealQueue,1);playReveal(nextItem) end
 end);done.Position=UDim2.fromOffset(205,316)
 playReveal=function(data)
  if revealing then table.insert(revealQueue,data);return end
- revealing=true;reveal.Visible=true;done.Visible=false
- for _,v in ipairs(stage:GetChildren()) do v:Destroy() end
  local item=C.Find(data.Kind=="Character" and C.Characters or C.Cosmetics,data.Id)
- if not item then revealing=false;reveal.Visible=false;notify("Unknown reward. Reopen inventory to refresh.");return end
- local tint=reveal:FindFirstChildOfClass("UIGradient");if tint then tint.Color=ColorSequence.new(item.Color,item.Color:Lerp(Color3.new(0,0,0),0.5)) end
- revealTier.Text="WHAT'S INSIDE?";revealName.Text="A new power is waking up...";revealSub.Text=""
- local crate=panel(stage,Vector2.new(136,116),Vector2.new(227,50),palette.Gold,true)
- local strap=panel(crate,Vector2.new(23,116),Vector2.new(57,0),palette.Pink,false)
- local lid=panel(crate,Vector2.new(152,27),Vector2.new(-8,-13),palette.Gold,true)
- task.spawn(function()
-  local started=os.clock();local tick=0
-  while os.clock()-started&lt;C.UI.RevealShakeSeconds do
-   tick=tick+1;crate.Rotation=tick%2==0 and 9 or -9
-   sound("Shake",0.65+tick*0.025);task.wait(0.11)
-  end
-  crate.Rotation=0;Polish.Pulse(.32);sound("Reveal",1.3)
-  Tween:Create(lid,TweenInfo.new(0.35,Enum.EasingStyle.Back),{Position=UDim2.fromOffset(-8,-105),Rotation=-25,BackgroundTransparency=1}):Play()
-  task.wait(0.35);crate:Destroy()
-  local customSound=data.Kind=="Character" and characterSummonSound(item.Id)
-  revealTier.Text=string.upper(C.Rarities[item.Tier]).." UNLOCKED!"
-  if data.Kind=="Character" then portrait(stage,item.Id,UDim2.fromOffset(175,-12),UDim2.fromOffset(240,205),true)
+ if not item then notify("Unknown reward. Reopen inventory to refresh.");return end
+ revealing=true;revealSerial+=1;local serial=revealSerial
+ reveal.Visible=false;done.Visible=false
+ for _,v in ipairs(stage:GetChildren()) do v:Destroy() end
+ local tint=reveal:FindFirstChildOfClass("UIGradient");if tint then tint.Color=ColorSequence.new(item.Color,item.Color:Lerp(Color3.new(0,0,0),.5)) end
+ local impactPlayed=false
+ local cardShown=false
+ local function rewardCard()
+  if serial~=revealSerial or cardShown then return end
+  cardShown=true
+  summonScene=nil;canvas.Visible=not titleActive;reveal.Visible=true
+  for _,v in ipairs(stage:GetChildren()) do v:Destroy() end
+  revealTier.Text=string.upper(C.Rarities[item.Tier])..(data.Preview and " PREVIEW" or " UNLOCKED!")
+  revealName.Text=item.Name;revealSub.Text=data.Preview and "PREVIEW ONLY • No fighter was granted." or "Saved to your collection. Equip it from inventory.";done.Label.Text=data.Preview and "CLOSE PREVIEW" or "KEEP IT!";done.Visible=true
+  if data.Kind=="Character" then
+   local ok=pcall(function() portrait(stage,item.Id,UDim2.fromOffset(175,-12),UDim2.fromOffset(240,205),item.Tier&gt;=5 and "Light" or true) end)
+   if not ok then
+    for _,v in ipairs(stage:GetChildren()) do v:Destroy() end
+    label(stage,"FIGHTER SAVED",UDim2.fromScale(1,1),UDim2.new(),30,item.Color)
+   end
   else
    local aura=panel(stage,Vector2.new(120,120),Vector2.new(235,28),item.Color,true);corner(aura,65)
    label(aura,"AURA",UDim2.fromScale(1,1),UDim2.new(),27)
   end
-  for i=1,22 do
-   local spark=Instance.new("Frame",stage);spark.Size=UDim2.fromOffset(7,14);spark.Position=UDim2.fromOffset(295,80);spark.BackgroundColor3=C.Colors[(i%6)+1];spark.Rotation=i*23;spark.BorderSizePixel=0
-   Tween:Create(spark,TweenInfo.new(0.9),{Position=UDim2.fromOffset(295+math.cos(i)*260,70+math.sin(i)*100),BackgroundTransparency=1,Rotation=i*40}):Play()
-   game:GetService("Debris"):AddItem(spark,1)
+  if not impactPlayed then sound("Reward",1.4) end
+ end
+ if data.Kind=="Character" and item.Tier&gt;=5 then
+  local focused=Input:GetFocusedTextBox();if focused then focused:ReleaseFocus() end
+  canvas.Visible=false
+  local controller=SummonCinematics.Play(item,{
+   Parent=p:WaitForChild("PlayerGui"),Portrait=portrait,Preview=data.Preview==true,
+   OnImpact=function()
+    impactPlayed=true
+    if not characterSummonSound(item.Id) then sound("Reveal",1.1) end
+   end,
+   OnComplete=rewardCard,
+  })
+  -- Setup failure may have already called rewardCard synchronously.
+  if controller and controller:IsPlaying() then summonScene=controller;return end
+  rewardCard();return
+ end
+ reveal.Visible=true;revealTier.Text="WHAT'S INSIDE?";revealName.Text="A new power is waking up...";revealSub.Text=""
+ local crate=panel(stage,Vector2.new(136,116),Vector2.new(227,50),palette.Gold,true)
+ panel(crate,Vector2.new(23,116),Vector2.new(57,0),palette.Pink,false)
+ local lid=panel(crate,Vector2.new(152,27),Vector2.new(-8,-13),palette.Gold,true)
+ task.spawn(function()
+  local started=os.clock();local tick=0
+  while os.clock()-started&lt;C.UI.RevealShakeSeconds do
+   if serial~=revealSerial or not crate.Parent then return end
+   tick+=1;crate.Rotation=tick%2==0 and 9 or -9;sound("Shake",.65+tick*.025);task.wait(.11)
   end
-  revealName.Text=item.Name;revealSub.Text="Saved to your collection. Equip it from inventory.";done.Visible=true;if not customSound then sound("Reward",1.6) end
+  if serial~=revealSerial or not crate.Parent then return end
+  crate.Rotation=0;sound("Reveal",1.3)
+  Tween:Create(lid,TweenInfo.new(.35,Enum.EasingStyle.Back),{Position=UDim2.fromOffset(-8,-105),Rotation=-25,BackgroundTransparency=1}):Play()
+  task.wait(.35)
+  if serial~=revealSerial then return end
+  impactPlayed=data.Kind=="Character" and characterSummonSound(item.Id) or false
+  rewardCard()
  end)
 end
 local eventSerial=0
@@ -1648,6 +1697,7 @@ Run.RenderStepped:Connect(function()
  for layer,spacing in pairs(movingPatterns) do
   if layer.Parent then layer.Position=UDim2.fromOffset((now*C.UI.StudSlideSpeed)%spacing-spacing,0) else movingPatterns[layer]=nil end
  end
+ if not (summonScene and summonScene:IsPlaying()) then
  for view,spin in pairs(spinningPreviews) do
   if view.Parent and spin.Model.Parent then
    if spin.Idle then
@@ -1655,6 +1705,7 @@ Run.RenderStepped:Connect(function()
     spin.Model:PivotTo(spin.Base*CFrame.new(0,math.sin(t)*.04,0)*CFrame.Angles(0,math.sin(t*.6)*.025,math.sin(t)*profile.Lean*.25))
    else spin.Model:PivotTo(spin.Base*CFrame.Angles(0,(now-spin.Started)*math.rad(C.UI.RevealSpinSpeed),0)) end
   else spinningPreviews[view]=nil end
+ end
  end
  if os.clock()-lastTick&lt;0.1 then return end; lastTick=os.clock()
  if state then
@@ -1687,7 +1738,10 @@ local function bindCamera(character)
   if state then Polish.Aura(character,state.Aura) end
  end
 end
-p.CharacterAdded:Connect(function(character) task.spawn(bindCamera,character) end)
+p.CharacterAdded:Connect(function(character)
+ if summonScene then summonScene:Cancel("Respawn") end
+ task.spawn(bindCamera,character)
+end)
 if p.Character then task.spawn(bindCamera,p.Character) end
 workspace:GetPropertyChangedSignal("CurrentCamera"):Connect(function()
  if viewportConnection then viewportConnection:Disconnect() end
@@ -72256,6 +72310,46 @@ function R.Prepare(template)
  return model
 end
 return R
+</ProtectedString></Properties></Item><Item class="ModuleScript" referent="RBX_RIFT_MODULE_SummonPresets"><Properties><string name="Name">SummonPresets</string><ProtectedString name="Source">-- Data-only summon direction. Effects are local, short, and share a fixed budget.
+local P={All={},Budget={MaxInstances=72,MaxParticles=36,MaxPreviewParts=64,MaxPreviewDescendants=256,FPS=30}}
+local function add(id,title,motif,color,accent,count,turns,tilt,pulse,phase,seed,pose)
+ P.All[id]={Title=title,Motif=motif,Color=color,Accent=accent,Count=count,Turns=turns,Tilt=tilt,Pulse=pulse,Phase=phase,Seed=seed,Pose=pose}
+end
+-- Mythic: one signature gesture and a restrained impact.
+add("vegeta","Royal Blue Ascension","pillar",{42,130,255},{243,210,95},12,.65,.08,.07,.15,101,"ascend")
+add("ichigo","Moonfang Crescent","slashes",{255,119,45},{60,33,84},10,.35,-.32,.08,.42,102,"strike")
+add("sukuna","Crimson Dismantle","slashes",{238,49,72},{255,178,164},16,-.55,.23,.11,.74,103,"strike")
+add("gojo","Limitless Convergence","orbit",{89,161,255},{213,124,255},12,1.2,.06,.055,1.05,104,"calm")
+add("asta","Anti-Magic Edge","slashes",{108,62,151},{246,72,59},14,-.8,-.2,.095,1.37,105,"strike")
+add("yuji","Black Flash Awakening","storm",{236,43,83},{255,206,184},10,.6,.19,.12,1.68,106,"strike")
+add("deku","Emerald Full Cowling","storm",{50,237,153},{210,255,220},14,1.05,-.08,.085,1.99,107,"charge")
+add("jotaro","Silent Star","clock",{148,95,247},{104,242,250},12,-.25,.04,.045,2.31,108,"calm")
+add("dio","The Frozen Second","clock",{255,214,64},{109,240,124},16,.2,-.12,.065,2.62,109,"strike")
+add("gogeta","Stardust Breaker","burst",{100,198,255},{255,161,88},18,1.4,.15,.09,2.93,110,"charge")
+add("vegito","Spirit Sword Radiance","pillar",{66,233,255},{255,233,133},10,-.45,-.16,.07,3.24,111,"strike")
+add("ssb_goku","Azure Kamehameha","pillar",{37,167,255},{220,252,255},14,.85,.02,.1,3.56,112,"charge")
+-- Secret: a slightly longer reveal, still using the same small effect pool.
+add("naruto","Sage Spiral","spiral",{255,153,49},{103,189,255},14,1.65,.18,.08,.27,113,"charge")
+add("aizen","Mirror Sovereignty","clock",{182,131,250},{247,226,174},10,-.65,-.09,.045,.59,114,"calm")
+add("ui_goku","Silver Stillness","orbit",{231,246,255},{103,193,255},12,-1.1,.035,.035,.91,115,"calm")
+add("cid","Atomic Eclipse","sigil",{160,95,247},{239,195,255},16,-.9,.12,.12,1.22,116,"calm")
+add("madara","Falling Heavens","sigil",{232,73,78},{255,173,84},18,.55,-.24,.1,1.54,117,"ascend")
+add("gear5_luffy","Clouds of Liberation","spiral",{245,243,255},{255,224,106},12,.95,.28,.06,1.85,118,"ascend")
+add("beerus","Destroyer's Violet Orbit","orbit",{174,91,239},{255,156,231},8,-1.45,-.05,.055,2.17,119,"calm")
+add("boros","Meteoric Drive","storm",{246,96,213},{111,238,255},18,1.8,.21,.11,2.48,120,"charge")
+add("saitama","Serious Horizon","burst",{250,92,66},{255,227,106},8,.15,0,.075,2.79,121,"strike")
+add("golden_experience_requiem","Return to Zero","sigil",{255,212,79},{205,112,252},14,-1.25,.14,.06,3.11,122,"calm")
+-- Super Secret: distinct silhouettes and color stories, never a larger object cap.
+add("marlon","Rift Sovereign","sigil",{69,249,221},{255,217,112},18,1.75,-.19,.1,.38,123,"ascend")
+add("awakened_aizen","Shattered Chrysalis","petals",{239,224,255},{181,110,247},16,-1.5,.24,.07,1.42,124,"ascend")
+add("broly","Emerald Detonation","burst",{130,247,65},{236,255,188},18,.95,-.11,.13,2.46,125,"charge")
+add("simon","Spiral Beyond Heaven","spiral",{60,224,255},{249,99,180},18,2.15,.31,.09,3.5,126,"ascend")
+function P.Get(id) return P.All[id] end
+function P.Duration(tier)
+ if tier==5 then return 3.2 elseif tier==6 then return 3.8 elseif tier==7 then return 4.4 end
+ return 0
+end
+return P
 </ProtectedString></Properties></Item><Item class="ModuleScript" referent="RBX_RIFT_MODULE_OutfitDetails"><Properties><string name="Name">OutfitDetails</string><ProtectedString name="Source">-- Small block-built accessories shared by live avatars and inventory previews.
 local D={}
 function D.Apply(character,outfit,parent,anchored)
@@ -72279,6 +72373,181 @@ function D.Apply(character,outfit,parent,anchored)
  if outfit.Tie then piece("Fighter tie",torso,{.25,1.3,.12},{0,.1,-.56},outfit.Tie) end
 end
 return D
+</ProtectedString></Properties></Item><Item class="ModuleScript" referent="RBX_RIFT_MODULE_SummonCinematics"><Properties><string name="Name">SummonCinematics</string><ProtectedString name="Source">-- A single local viewport + a small reusable pool of GUI effects. No world-camera,
+-- physics, remote requests, downloaded assets, or per-frame Instance allocation.
+local Scenes={}
+local Presets=require(script.Parent:WaitForChild("SummonPresets"))
+local Run=game:GetService("RunService")
+local Input=game:GetService("UserInputService")
+Scenes.Budget=Presets.Budget
+local active
+local function color(rgb) return Color3.fromRGB(rgb[1],rgb[2],rgb[3]) end
+local function ease(x) return 1-(1-math.clamp(x,0,1))^3 end
+function Scenes.Play(item,ctx)
+ local preset=Presets.Get(item.Id)
+ if not preset or item.Tier&lt;5 then return nil end
+ if active then active:Cancel("Replaced") end
+ local clock=ctx.Clock or os.clock
+ local started=clock()
+ local duration=Presets.Duration(item.Tier)
+ local reduced=ctx.ReducedEffects==true or Input.TouchEnabled==true
+ local count=math.min(preset.Count,reduced and 10 or Presets.Budget.MaxParticles)
+ local fps=reduced and 24 or Presets.Budget.FPS
+ local connections={}
+ local finished=false
+ local impacted=false
+ local ui,actor,view,base
+ local made=0
+ local controller={Metrics={Effects=0,Particles=count,FPS=fps,Duration=duration}}
+ local function make(class,parent)
+  assert(made&lt;Presets.Budget.MaxInstances,"Summon effect budget exceeded")
+  local value=Instance.new(class);value.Parent=parent;made+=1;controller.Metrics.Effects=made;return value
+ end
+ local function finish(reason,alreadyDestroying)
+  if finished then return end;finished=true
+  for _,connection in ipairs(connections) do connection:Disconnect() end;table.clear(connections)
+  if active==controller then active=nil end
+  if ui and not alreadyDestroying then ui:Destroy() end
+  if ctx.OnComplete then
+   local ok,err=pcall(ctx.OnComplete,reason);if not ok then warn("Summon reveal callback: "..tostring(err)) end
+  end
+ end
+ function controller:Cancel(reason) finish(reason or "Skipped") end
+ function controller:IsPlaying() return not finished end
+ active=controller
+ local ok,err=xpcall(function()
+  local primary,accent=color(preset.Color),color(preset.Accent)
+  ui=make("ScreenGui",ctx.Parent);ui.Name="RiftSummonCutscene";ui.DisplayOrder=70;ui.IgnoreGuiInset=true;ui.ResetOnSpawn=false;ui.ZIndexBehavior=Enum.ZIndexBehavior.Sibling
+  local root=make("CanvasGroup",ui);root.Size=UDim2.fromScale(1,1);root.BackgroundColor3=primary:Lerp(Color3.new(0,0,0),.91);root.Active=true;root.GroupTransparency=0
+  local gradient=make("UIGradient",root);gradient.Rotation=30+preset.Seed%120;gradient.Color=ColorSequence.new(primary:Lerp(Color3.new(0,0,0),.84),accent:Lerp(Color3.new(0,0,0),.95))
+  local stage=make("Frame",root);stage.Name="CinematicStage";stage.Size=UDim2.fromOffset(720,620);stage.AnchorPoint=Vector2.new(.5,.5);stage.Position=UDim2.fromScale(.5,.5);stage.BackgroundTransparency=1
+  local fit=make("UIScale",stage)
+  local function resize()
+   local camera=workspace.CurrentCamera;if not camera then return end
+   fit.Scale=math.max(.01,math.min((camera.ViewportSize.X-24)/720,(camera.ViewportSize.Y-40)/620,1.45))
+  end
+  local viewportConnection
+  local function connectCamera()
+   if viewportConnection then viewportConnection:Disconnect() end
+   local camera=workspace.CurrentCamera
+   if camera then viewportConnection=camera:GetPropertyChangedSignal("ViewportSize"):Connect(resize);table.insert(connections,viewportConnection) end
+   resize()
+  end
+  local function frame(parent,w,h,x,y,tint,z)
+   local f=make("Frame",parent);f.Size=UDim2.fromOffset(w,h);f.Position=UDim2.fromOffset(x,y);f.BackgroundColor3=tint;f.BorderSizePixel=0;f.ZIndex=z or 1;return f
+  end
+  local function label(value,y,size,tint)
+   local l=make("TextLabel",stage);l.Size=UDim2.fromOffset(700,54);l.Position=UDim2.fromOffset(10,y);l.BackgroundTransparency=1;l.Font=Enum.Font.FredokaOne;l.Text=value;l.TextSize=size;l.TextColor3=tint;l.TextWrapped=true;l.TextStrokeTransparency=.2;l.ZIndex=6;return l
+  end
+  local top=frame(root,0,0,0,0,Color3.new(0,0,0),8);top.Size=UDim2.new(1,0,.075,0)
+  local bottom=frame(root,0,0,0,0,Color3.new(0,0,0),8);bottom.Size=UDim2.new(1,0,.075,0);bottom.Position=UDim2.new(0,0,.925,0)
+  label(({[5]="MYTHIC",[6]="SECRET",[7]="SUPER SECRET"})[item.Tier]..(ctx.Preview and " PREVIEW" or " SUMMON"),18,23,accent)
+  local phrase=label(preset.Title,71,31,Color3.new(1,1,1))
+  local name=label(item.Name,500,36,primary:Lerp(Color3.new(1,1,1),.5));name.TextTransparency=1
+  local caption=label("A new power is awakening...",553,17,accent)
+  local progress=frame(stage,420,3,150,605,Color3.fromRGB(45,53,66),6)
+  local fill=frame(progress,0,3,0,0,accent,6)
+  local skip=make("TextButton",root);skip.Name="SkipCutscene";skip.AnchorPoint=Vector2.new(1,1);skip.Position=UDim2.new(1,-24,1,-16);skip.Size=UDim2.fromOffset(180,42);skip.BackgroundColor3=Color3.fromRGB(21,26,37);skip.TextColor3=Color3.new(1,1,1);skip.Font=Enum.Font.GothamBold;skip.TextSize=15;skip.Text="SKIP  [SPACE / B]";skip.AutoButtonColor=true;skip.ZIndex=12;skip.Selectable=true;skip.Modal=true
+  local corner=make("UICorner",skip);corner.CornerRadius=UDim.new(0,10)
+  local wash=frame(stage,720,620,0,0,primary,5);wash.BackgroundTransparency=1
+  -- Existing portrait construction supplies exactly one character clone, separately
+  -- budgeted from the effect pool. It is never cloned or rebuilt during a frame.
+  view=ctx.Portrait(stage,item.Id,UDim2.fromOffset(130,94),UDim2.fromOffset(460,420),"Cinematic")
+  assert(view,"No character preview")
+  local world=view:FindFirstChildOfClass("WorldModel")
+  actor=world and world:FindFirstChildOfClass("Model");base=actor and actor:GetPivot()
+  view.ZIndex=3;view.LightColor=primary:Lerp(Color3.new(1,1,1),.75)
+  local rings={}
+  for index=1,3 do
+   local f=frame(stage,140+index*45,140+index*45,360,295,index%2==0 and accent or primary,2);f.AnchorPoint=Vector2.new(.5,.5);f.BackgroundTransparency=1;f.Rotation=index*25
+   local radius=make("UICorner",f);radius.CornerRadius=UDim.new(.5,0)
+   local line=make("UIStroke",f);line.Thickness=index==1 and 3 or 1.5;line.Color=index%2==0 and accent or primary;line.Transparency=.5
+   table.insert(rings,{Frame=f,Line=line})
+  end
+  local particles={}
+  for index=1,count do
+   local f=frame(stage,6,15,360,295,index%3==0 and accent or primary,4)
+   f.AnchorPoint=Vector2.new(.5,.5);f.BackgroundTransparency=.25
+   if preset.Motif=="orbit" or preset.Motif=="petals" then local c=make("UICorner",f);c.CornerRadius=UDim.new(1,0) end
+   table.insert(particles,f)
+  end
+  connectCamera()
+  table.insert(connections,workspace:GetPropertyChangedSignal("CurrentCamera"):Connect(connectCamera))
+  table.insert(connections,skip.Activated:Connect(function() finish("Skipped") end))
+  table.insert(connections,Input.InputBegan:Connect(function(input,processed)
+   if not processed and (input.KeyCode==Enum.KeyCode.Space or input.KeyCode==Enum.KeyCode.ButtonB) then finish("Skipped") end
+  end))
+  table.insert(connections,ui.Destroying:Connect(function() finish("Closed",true) end))
+  local last=-math.huge
+  local function update(now)
+   local elapsed=math.max(0,now-started);local p=math.clamp(elapsed/duration,0,1)
+   if p&gt;=1 then finish("Completed");return end
+   if not ui.Parent then finish("Closed");return end
+   local enter=ease(p/.24);local exit=math.clamp((p-.89)/.11,0,1)
+   local impact=math.max(0,1-math.abs(p-.55)/.12)
+   root.GroupTransparency=math.max(1-enter,exit)
+   wash.BackgroundTransparency=1-impact*(.08+preset.Pulse*.3) -- a tint accent, never a white flash
+   phrase.TextTransparency=math.clamp((p-.68)/.18,0,1)
+   name.TextTransparency=1-ease((p-.5)/.18)
+   caption.Text=ctx.Preview and "Preview only • No rewards granted" or p&gt;.6 and "Already saved to your collection" or "A new power is awakening..."
+   fill.Size=UDim2.fromOffset(420*p,3)
+   if not impacted and p&gt;=.52 then impacted=true;if ctx.OnImpact then local soundOK,soundError=pcall(ctx.OnImpact);if not soundOK then warn(tostring(soundError)) end end end
+   if view.CurrentCamera then view.CurrentCamera.FieldOfView=38-enter*5-impact*2+p*2 end
+   if actor and actor.Parent and base then
+    local yaw=math.sin(p*math.pi)*.22*preset.Turns
+    local rise=preset.Pose=="ascend" and math.sin(p*math.pi)*.28 or preset.Pose=="charge" and -impact*.13 or math.sin(elapsed)*.035
+    local lean=preset.Pose=="strike" and (impact-.2)*preset.Tilt or math.sin(p*math.pi)*preset.Tilt*.2
+    actor:PivotTo(base*CFrame.new(preset.Pose=="strike" and impact*.13 or 0,rise,0)*CFrame.Angles(0,yaw,lean))
+   end
+   for index,entry in ipairs(rings) do
+    local size=(145+index*45)*(enter+.2+impact*.25)
+    entry.Frame.Size=UDim2.fromOffset(size,size);entry.Frame.Rotation=p*180*preset.Turns+index*24
+    entry.Line.Transparency=math.clamp(.55-impact*.3+exit,0,1)
+    -- Clock freezes, then reverses. Sigils retain angular ritual outlines.
+    if preset.Motif=="clock" then entry.Frame.Rotation=(p&lt;.5 and p or .5-(p-.5)*2)*180*preset.Turns+index*30 end
+    if preset.Motif=="sigil" then entry.Frame.Rotation=p*90*preset.Turns+index*45 end
+   end
+   for index,f in ipairs(particles) do
+    local angle=index/count*math.pi*2+preset.Phase
+    local phase=(p*1.8+index/count)%1
+    local radius=65+enter*115+impact*45
+    local x,y=math.cos(angle+p*preset.Turns*3)*radius,math.sin(angle+p*preset.Turns*3)*radius*.72
+    local w,h,rotation=5,14,angle*180/math.pi
+    if preset.Motif=="slashes" then
+     x=(phase-.5)*600;y=math.sin(index*2+preset.Phase)*160;w=90+index%4*34;h=3+index%2;rotation=preset.Tilt*150+index%2*75
+    elseif preset.Motif=="storm" then
+     x=math.sin(index*2.7+p*14)*200;y=(phase-.5)*430;w=3;h=28+index%4*13;rotation=math.sin(index+p*10)*40
+    elseif preset.Motif=="pillar" then
+     x=math.sin(index*1.7+preset.Phase)*175;y=200-phase*410;w=3+index%3;h=42+index%3*28;rotation=preset.Tilt*20
+    elseif preset.Motif=="burst" then
+     radius=40+phase*240;x=math.cos(angle)*radius;y=math.sin(angle)*radius*.8;w=8;h=35+phase*80;rotation=angle*180/math.pi+90
+    elseif preset.Motif=="petals" then
+     x=math.cos(angle+p*3)*radius;y=(phase-.5)*390;w=9;h=17;rotation=p*360+index*25
+    elseif preset.Motif=="clock" then
+     local turn=p&lt;.5 and p or .5-(p-.5)*2
+     x=math.cos(angle+turn*preset.Turns)*radius;y=math.sin(angle+turn*preset.Turns)*radius;w=4;h=index%3==0 and 23 or 12;rotation=angle*180/math.pi+turn*60
+    elseif preset.Motif=="spiral" then
+     radius=35+(1-phase)*220;x=math.cos(angle+p*preset.Turns*7)*radius;y=math.sin(angle+p*preset.Turns*7)*radius*.75;w=5;h=22;rotation=angle*180/math.pi+p*180
+    elseif preset.Motif=="orbit" then
+     radius=radius*(1-impact*.35);x=math.cos(angle+p*preset.Turns*4)*radius;y=math.sin(angle+p*preset.Turns*4)*radius*.7;w=index&lt;=2 and 23 or 7;h=w;rotation=0
+    elseif preset.Motif=="sigil" then
+     local segment=index%2==0 and 1 or .7;x=math.cos(angle+p*preset.Turns)*radius*segment;y=math.sin(angle+p*preset.Turns)*radius*segment;w=4;h=24;rotation=angle*180/math.pi+p*60
+    end
+    f.Position=UDim2.fromOffset(360+x,290+y);f.Size=UDim2.fromOffset(w,h);f.Rotation=rotation;f.BackgroundTransparency=math.clamp(.2+math.abs(phase-.5)*.8+exit,0,1)
+   end
+  end
+  table.insert(connections,Run.RenderStepped:Connect(function()
+   if finished then return end
+   local now=clock();if now-last&lt;1/fps then return end;last=now
+   local frameOK,frameError=pcall(update,now)
+   if not frameOK then warn("Summon cutscene: "..tostring(frameError));finish("Error") end
+  end))
+  update(started)
+ end,debug.traceback)
+ if not ok then warn("Summon cutscene setup: "..tostring(err));finish("Error") end
+ return controller
+end
+return Scenes
 </ProtectedString></Properties></Item></Item>
 	</Item>
 	<Item class="ServerScriptService" referent="RBX980">

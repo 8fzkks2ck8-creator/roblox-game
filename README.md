@@ -58,7 +58,7 @@ Checks without rebuilding:
 python3 tools/validate.py --luau /path/to/luau --compiler /path/to/luau-compile
 ```
 
-149 gameplay/UI checks pass, plus 16 rig/clothing checks using real Roblox instance types in Lune. The suite executes the actual config, profiles, economy, map, layout, client UI and server request/receipt code with deterministic engine stand-ins. It checks odds, pending-power sales, repeated-sale/recycle protection, rebirth costs/resets/preserved collectibles, unequipped baseline power, ownership validation, profile closing, failed-save recovery, purchase receipt replay, rejection of legacy combat actions, map repeatability, six stations, six viewport sizes, search and menu wiring, title loading/Play/retry/input/camera transitions, all 19 requested rarities and roll pools, and the new accessory builder. The simulated DataStore outage warning is intentional. Binary conversion decodes its output again and verifies instance and script counts/sources.
+234 gameplay/UI/cinematic checks pass, plus 16 rig/clothing checks using real Roblox instance types in Lune. The suite executes the actual config, profiles, economy, map, layout, client UI and server request/receipt code with deterministic engine stand-ins. It checks odds, pending-power sales, repeated-sale/recycle protection, rebirth costs/resets/preserved collectibles, unequipped baseline power, ownership validation, profile closing, failed-save recovery, purchase receipt replay, rejection of legacy combat actions, map repeatability, six stations, six viewport sizes, search and menu wiring, title loading/Play/retry/input/camera transitions, all 19 requested rarities and roll pools, and the new accessory builder. The simulated DataStore outage warning is intentional. Binary conversion decodes its output again and verifies instance and script counts/sources.
 
 ## Before publishing
 
@@ -84,3 +84,21 @@ Extra raised grass studs and native stud surfaces make the plaza and fallback bo
 The original styled buttons retain their pack icons and now form an eight-button, two-column grid on the left. Only the main click action remains along the bottom. **Sell Power** at the top immediately converts banked power to coins; the side Sell icon opens the explanatory Sell menu. **Base** returns the player to the clicking court, and **Shop** opens the store. Desktop dialogs sit to the right of the side grid. Currency and progress indicators remain visible without adding extra bottom navigation buttons.
 
 Carrier conversion now moves classic Shirts, Pants, ShirtGraphics and BodyColors onto the R6 Humanoid model. Covered R6 body parts are visible, and the corresponding untextured visual body pieces are hidden; head/accessory meshes and textured parts outside those clothing regions remain preserved. Canonical R6 models keep their authored clothing. This fixes a known hierarchy problem but cannot supply missing clothing assets or guarantee layered-clothing conversion. The current edited place file has not been provided with the latest screenshot, so specific locally modified characters still need inspection and Studio rendering tests.
+
+## Character-specific high-tier summon cutscenes
+
+All **26 Mythic, Secret and Super Secret fighters** have a distinct themed reveal in `src/shared/SummonPresets.luau`. Examples include Gojo's blue/purple convergence, Sukuna's crimson cuts, Deku's emerald storm, Dio's reversing clock, Saitama's horizon burst, Broly's green detonation and Simon's rising spiral. A shared renderer combines each fighter's own palette, timing, motif, phrase and pose direction; these are short stylized viewport cinematics, not newly uploaded animation clips or story videos.
+
+Mythic scenes last **3.2 seconds**, Secret scenes **3.8 seconds**, and Super Secret scenes **4.4 seconds**. Ordinary fighters and cosmetic rolls keep their quick crate reveal. Each scene has a visible Skip button and supports Space/gamepad B. Skipping proceeds to the saved reward card; Keep dismisses it before the next queued reveal. Rewards were already committed by the server and are never granted, rerolled or equipped by the cinematic.
+
+Resource limits:
+
+- One local scene at a time; no world physics, gameplay-camera takeover or new network requests.
+- At most **72 effect/UI instances**, excluding one bounded character preview, with 8–18 reusable GUI shards and three rings. No Instances are created during frame updates.
+- Cinematic previews cap imported rigs at **64 body parts / 256 descendants**. Oversized rigs use the built-in block outfit. Embedded emitters, beams, trails, lights and sounds are removed from the cinematic clone and high-tier reward-card preview.
+- Updates are capped at **30 Hz**; touch/reduced-effects mode uses **24 Hz** and at most ten shards. Background HUD previews pause while the cinematic runs.
+- Completion, Skip, respawn, replacement, setup failure and overlay removal disconnect the renderer and destroy the scene. Invalid previews still expose a fallback reward card. Existing summon audio is reused at the impact, with no new audio uploads.
+
+In **Studio**, press **F8 → Preview Summon Cutscenes → choose a fighter** to review all 26 without coins, tickets or rewards. Live admins can also access the local preview menu. Previews explicitly say no fighter was granted.
+
+The 234 checks include every preset's coverage/uniqueness, all 26 scene completions, effect budgets, zero per-frame Instance allocation, reduced effects, throttling, Skip/cleanup, malformed and oversized rigs, FIFO reward cards, camera preservation and preview-only behavior. Simulated preview-failure warnings in the test output are intentional. Actual visual polish, frame rate on devices and sound permissions still need Roblox Studio/device testing.

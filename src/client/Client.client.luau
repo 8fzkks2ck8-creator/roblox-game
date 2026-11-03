@@ -13,6 +13,7 @@ local Layout=require(folder:WaitForChild("ClientLayout"))
 local TitleScreen=require(folder:WaitForChild("TitleScreen"))
 local OutfitDetails=require(folder:WaitForChild("OutfitDetails"))
 local IdleMotion=require(folder:WaitForChild("IdleMotion"))
+local SummonCinematics=require(folder:WaitForChild("SummonCinematics"))
 local Request=folder:WaitForChild("Request"); local Event=folder:WaitForChild("Event")
 local ui=Instance.new("ScreenGui"); ui.Name="AnimeRiftUI"; ui.ResetOnSpawn=false; ui.ZIndexBehavior=Enum.ZIndexBehavior.Sibling; ui.Parent=p:WaitForChild("PlayerGui")
 local canvas=Instance.new("Frame",ui); canvas.Size=UDim2.fromOffset(1200,760); canvas.AnchorPoint=Vector2.new(0.5,0.5); canvas.Position=UDim2.fromScale(0.5,0.5); canvas.BackgroundTransparency=1
@@ -43,6 +44,8 @@ local menuSerial=0
 local loadingStarted=os.clock()
 local apply
 local revealing=false
+local summonScene
+local revealSerial=0
 local wheelSpinning=false
 local wheelButton
 local revealQueue={}
@@ -330,17 +333,28 @@ local buffTip=label(canvas,"2x luck • boosts Rare+ odds",UDim2.fromOffset(240,
 buffIcon.MouseEnter:Connect(function() buffTip.Visible=buffIcon.Visible end)
 buffIcon.MouseLeave:Connect(function() buffTip.Visible=false end)
 local function portrait(parent,id,pos,size,spin)
+ local lightweight=spin=="Cinematic" or spin=="Light"
  local outfit=C.Outfits[id]
  local view=Instance.new("ViewportFrame",parent); view.Position=pos; view.Size=size; view.BackgroundTransparency=1; view.LightColor=Color3.new(1,1,1); view.Ambient=Color3.fromRGB(195,195,195); view.ZIndex=2
  local camera=Instance.new("Camera",view); camera.CFrame=CFrame.lookAt(Vector3.new(3,2,-7),Vector3.new(0,0.4,0)); camera.FieldOfView=34; view.CurrentCamera=camera
  local assets=folder:FindFirstChild("Assets");local models=assets and assets:FindFirstChild("CharacterModels");local custom=models and models:FindFirstChild(id)
+ if custom and custom:IsA("Model") and lightweight then
+  local descendants=custom:GetDescendants();local parts=0
+  for _,item in ipairs(descendants) do if item:IsA("BasePart") then parts+=1 end end
+  if #descendants>SummonCinematics.Budget.MaxPreviewDescendants or parts>SummonCinematics.Budget.MaxPreviewParts or parts==0 then custom=nil end
+ end
  if custom and custom:IsA("Model") then
   local wm=Instance.new("WorldModel",view);local display=custom:Clone()
-  for _,v in ipairs(display:GetDescendants()) do if v:IsA("LuaSourceContainer") then v:Destroy() elseif v:IsA("BasePart") then v.Anchored=true end end
+  local descendants=display:GetDescendants()
+  for index=#descendants,1,-1 do
+   local v=descendants[index]
+   if v:IsA("LuaSourceContainer") or (lightweight and (v:IsA("ParticleEmitter") or v:IsA("Trail") or v:IsA("Beam") or v:IsA("Light") or v:IsA("Sound"))) then v:Destroy()
+   elseif v:IsA("BasePart") then v.Anchored=true;v.CanCollide=false;v.CanTouch=false end
+  end
   display.Parent=wm;display:PivotTo(CFrame.new())
   local cf,sz=display:GetBoundingBox();local distance=math.max(sz.X,sz.Y,sz.Z)*2
   camera.CFrame=CFrame.lookAt(cf.Position+Vector3.new(distance*0.35,sz.Y*0.12,-distance),cf.Position)
-  spinningPreviews[view]={Model=display,Base=display:GetPivot(),Started=os.clock(),Idle=not spin,Id=id}
+  if spin~="Cinematic" then spinningPreviews[view]={Model=display,Base=display:GetPivot(),Started=os.clock(),Idle=spin~=true,Id=id} end
   return view
  end
  if not outfit then outfit=C.Outfits.yamcha end
@@ -358,7 +372,7 @@ local function portrait(parent,id,pos,size,spin)
   for i=-2,2 do local hair=block("Hair",Vector3.new(0.25,0.5,0.8),Vector3.new(i*0.2,2,0),outfit.Hair); hair.Rotation=Vector3.new(0,0,-i*12) end
  end
  OutfitDetails.Apply(display,outfit,display,true)
- spinningPreviews[view]={Model=display,Base=display:GetPivot(),Started=os.clock(),Idle=not spin,Id=id}
+ if spin~="Cinematic" then spinningPreviews[view]={Model=display,Base=display:GetPivot(),Started=os.clock(),Idle=spin~=true,Id=id} end
  return view
 end
 renderInventory=function()
@@ -507,7 +521,14 @@ render=function()
   row("2x luck doubles the actual probability of Rare and higher tiers. Standard Secret: 0.01% → 0.02%. Boosted Secret: 0.1% → 0.2%. Each tier splits equally between its rollable fighters. See the live per-fighter odds below; luck doubles Rare and higher tier odds.",90)
   odds(false,false); odds(false,true)
   if selectedProduct=="Luck" then row("Luck also applies to cosmetic rolls:",40); odds(true,false); odds(true,true) end
+ elseif page=="Cutscenes" then
+  if not (state.Studio or state.IsAdmin) then row("Cutscene previews are available in Studio or to admins.",65);return end
+  row("LOCAL CUTSCENE PREVIEWS\nNo coins, tickets or fighters are granted. Skip any scene, then close its preview card to watch another.",85)
+  for _,hero in ipairs(C.Characters) do
+   if hero.Tier>=5 then action("PREVIEW • "..hero.Name,hero.Color,function() playReveal({Kind="Character",Id=hero.Id,Preview=true}) end) end
+  end
  elseif page=="Admin" then
+  if state.Studio or state.IsAdmin then action("PREVIEW SUMMON CUTSCENES • NO REWARDS",palette.Cyan,function() open("Cutscenes") end) end
   row("ADMIN PANEL • Your Roblox user ID: "..tostring(p.UserId).."\n"..(state.IsOwner and "OWNER VERIFIED • Character grants enabled" or state.IsAdmin and "EVENT ACCESS • Owner setup needed for character grants" or "READ-ONLY • This account has no admin permission"),80)
   if not state.IsOwner then
    row("Stop Play. In Explorer: ReplicatedStorage → AnimeRift → AdminSettings → OwnerUserId. Set Value to your numeric user ID above, then Play again. Live commands still require server permission.",100)
@@ -565,43 +586,71 @@ local revealName=label(reveal,"",UDim2.fromOffset(590,45),UDim2.fromOffset(20,24
 local revealSub=label(reveal,"",UDim2.fromOffset(590,30),UDim2.fromOffset(20,285),17,palette.White)
 local stage=Instance.new("Frame",reveal);stage.Size=UDim2.fromOffset(590,190);stage.Position=UDim2.fromOffset(20,52);stage.BackgroundTransparency=1
 local done=button(reveal,"KEEP IT!",220,36,palette.Mint,function()
- reveal.Visible=false;revealing=false;stopSummonSound()
+ revealSerial+=1;reveal.Visible=false;revealing=false;stopSummonSound()
  for _,v in ipairs(stage:GetChildren()) do v:Destroy() end
  if #revealQueue>0 then local nextItem=table.remove(revealQueue,1);playReveal(nextItem) end
 end);done.Position=UDim2.fromOffset(205,316)
 playReveal=function(data)
  if revealing then table.insert(revealQueue,data);return end
- revealing=true;reveal.Visible=true;done.Visible=false
- for _,v in ipairs(stage:GetChildren()) do v:Destroy() end
  local item=C.Find(data.Kind=="Character" and C.Characters or C.Cosmetics,data.Id)
- if not item then revealing=false;reveal.Visible=false;notify("Unknown reward. Reopen inventory to refresh.");return end
- local tint=reveal:FindFirstChildOfClass("UIGradient");if tint then tint.Color=ColorSequence.new(item.Color,item.Color:Lerp(Color3.new(0,0,0),0.5)) end
- revealTier.Text="WHAT'S INSIDE?";revealName.Text="A new power is waking up...";revealSub.Text=""
- local crate=panel(stage,Vector2.new(136,116),Vector2.new(227,50),palette.Gold,true)
- local strap=panel(crate,Vector2.new(23,116),Vector2.new(57,0),palette.Pink,false)
- local lid=panel(crate,Vector2.new(152,27),Vector2.new(-8,-13),palette.Gold,true)
- task.spawn(function()
-  local started=os.clock();local tick=0
-  while os.clock()-started<C.UI.RevealShakeSeconds do
-   tick=tick+1;crate.Rotation=tick%2==0 and 9 or -9
-   sound("Shake",0.65+tick*0.025);task.wait(0.11)
-  end
-  crate.Rotation=0;Polish.Pulse(.32);sound("Reveal",1.3)
-  Tween:Create(lid,TweenInfo.new(0.35,Enum.EasingStyle.Back),{Position=UDim2.fromOffset(-8,-105),Rotation=-25,BackgroundTransparency=1}):Play()
-  task.wait(0.35);crate:Destroy()
-  local customSound=data.Kind=="Character" and characterSummonSound(item.Id)
-  revealTier.Text=string.upper(C.Rarities[item.Tier]).." UNLOCKED!"
-  if data.Kind=="Character" then portrait(stage,item.Id,UDim2.fromOffset(175,-12),UDim2.fromOffset(240,205),true)
+ if not item then notify("Unknown reward. Reopen inventory to refresh.");return end
+ revealing=true;revealSerial+=1;local serial=revealSerial
+ reveal.Visible=false;done.Visible=false
+ for _,v in ipairs(stage:GetChildren()) do v:Destroy() end
+ local tint=reveal:FindFirstChildOfClass("UIGradient");if tint then tint.Color=ColorSequence.new(item.Color,item.Color:Lerp(Color3.new(0,0,0),.5)) end
+ local impactPlayed=false
+ local cardShown=false
+ local function rewardCard()
+  if serial~=revealSerial or cardShown then return end
+  cardShown=true
+  summonScene=nil;canvas.Visible=not titleActive;reveal.Visible=true
+  for _,v in ipairs(stage:GetChildren()) do v:Destroy() end
+  revealTier.Text=string.upper(C.Rarities[item.Tier])..(data.Preview and " PREVIEW" or " UNLOCKED!")
+  revealName.Text=item.Name;revealSub.Text=data.Preview and "PREVIEW ONLY • No fighter was granted." or "Saved to your collection. Equip it from inventory.";done.Label.Text=data.Preview and "CLOSE PREVIEW" or "KEEP IT!";done.Visible=true
+  if data.Kind=="Character" then
+   local ok=pcall(function() portrait(stage,item.Id,UDim2.fromOffset(175,-12),UDim2.fromOffset(240,205),item.Tier>=5 and "Light" or true) end)
+   if not ok then
+    for _,v in ipairs(stage:GetChildren()) do v:Destroy() end
+    label(stage,"FIGHTER SAVED",UDim2.fromScale(1,1),UDim2.new(),30,item.Color)
+   end
   else
    local aura=panel(stage,Vector2.new(120,120),Vector2.new(235,28),item.Color,true);corner(aura,65)
    label(aura,"AURA",UDim2.fromScale(1,1),UDim2.new(),27)
   end
-  for i=1,22 do
-   local spark=Instance.new("Frame",stage);spark.Size=UDim2.fromOffset(7,14);spark.Position=UDim2.fromOffset(295,80);spark.BackgroundColor3=C.Colors[(i%6)+1];spark.Rotation=i*23;spark.BorderSizePixel=0
-   Tween:Create(spark,TweenInfo.new(0.9),{Position=UDim2.fromOffset(295+math.cos(i)*260,70+math.sin(i)*100),BackgroundTransparency=1,Rotation=i*40}):Play()
-   game:GetService("Debris"):AddItem(spark,1)
+  if not impactPlayed then sound("Reward",1.4) end
+ end
+ if data.Kind=="Character" and item.Tier>=5 then
+  local focused=Input:GetFocusedTextBox();if focused then focused:ReleaseFocus() end
+  canvas.Visible=false
+  local controller=SummonCinematics.Play(item,{
+   Parent=p:WaitForChild("PlayerGui"),Portrait=portrait,Preview=data.Preview==true,
+   OnImpact=function()
+    impactPlayed=true
+    if not characterSummonSound(item.Id) then sound("Reveal",1.1) end
+   end,
+   OnComplete=rewardCard,
+  })
+  -- Setup failure may have already called rewardCard synchronously.
+  if controller and controller:IsPlaying() then summonScene=controller;return end
+  rewardCard();return
+ end
+ reveal.Visible=true;revealTier.Text="WHAT'S INSIDE?";revealName.Text="A new power is waking up...";revealSub.Text=""
+ local crate=panel(stage,Vector2.new(136,116),Vector2.new(227,50),palette.Gold,true)
+ panel(crate,Vector2.new(23,116),Vector2.new(57,0),palette.Pink,false)
+ local lid=panel(crate,Vector2.new(152,27),Vector2.new(-8,-13),palette.Gold,true)
+ task.spawn(function()
+  local started=os.clock();local tick=0
+  while os.clock()-started<C.UI.RevealShakeSeconds do
+   if serial~=revealSerial or not crate.Parent then return end
+   tick+=1;crate.Rotation=tick%2==0 and 9 or -9;sound("Shake",.65+tick*.025);task.wait(.11)
   end
-  revealName.Text=item.Name;revealSub.Text="Saved to your collection. Equip it from inventory.";done.Visible=true;if not customSound then sound("Reward",1.6) end
+  if serial~=revealSerial or not crate.Parent then return end
+  crate.Rotation=0;sound("Reveal",1.3)
+  Tween:Create(lid,TweenInfo.new(.35,Enum.EasingStyle.Back),{Position=UDim2.fromOffset(-8,-105),Rotation=-25,BackgroundTransparency=1}):Play()
+  task.wait(.35)
+  if serial~=revealSerial then return end
+  impactPlayed=data.Kind=="Character" and characterSummonSound(item.Id) or false
+  rewardCard()
  end)
 end
 local eventSerial=0
@@ -682,6 +731,7 @@ Run.RenderStepped:Connect(function()
  for layer,spacing in pairs(movingPatterns) do
   if layer.Parent then layer.Position=UDim2.fromOffset((now*C.UI.StudSlideSpeed)%spacing-spacing,0) else movingPatterns[layer]=nil end
  end
+ if not (summonScene and summonScene:IsPlaying()) then
  for view,spin in pairs(spinningPreviews) do
   if view.Parent and spin.Model.Parent then
    if spin.Idle then
@@ -689,6 +739,7 @@ Run.RenderStepped:Connect(function()
     spin.Model:PivotTo(spin.Base*CFrame.new(0,math.sin(t)*.04,0)*CFrame.Angles(0,math.sin(t*.6)*.025,math.sin(t)*profile.Lean*.25))
    else spin.Model:PivotTo(spin.Base*CFrame.Angles(0,(now-spin.Started)*math.rad(C.UI.RevealSpinSpeed),0)) end
   else spinningPreviews[view]=nil end
+ end
  end
  if os.clock()-lastTick<0.1 then return end; lastTick=os.clock()
  if state then
@@ -721,7 +772,10 @@ local function bindCamera(character)
   if state then Polish.Aura(character,state.Aura) end
  end
 end
-p.CharacterAdded:Connect(function(character) task.spawn(bindCamera,character) end)
+p.CharacterAdded:Connect(function(character)
+ if summonScene then summonScene:Cancel("Respawn") end
+ task.spawn(bindCamera,character)
+end)
 if p.Character then task.spawn(bindCamera,p.Character) end
 workspace:GetPropertyChangedSignal("CurrentCamera"):Connect(function()
  if viewportConnection then viewportConnection:Disconnect() end

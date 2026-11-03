@@ -115,3 +115,15 @@ for id,tier in pairs(additions) do
  local rng={NextNumber=function() return start+odds[tier]/2 end,NextInteger=function(_,a,b) assert(index and index>=a and index<=b);return index end}
  check(hero and hero.Tier==tier and C.Outfits[id] and C.Roll(C.Characters,false,false,rng).Id==id,"requested rarity and summon availability: "..id)
 end
+
+local CutscenePresets=loadstring(PRESETS_SOURCE,"SummonPresets")()
+local cinematicCount=0;local titles={};local seeds={}
+for _,hero in ipairs(C.Characters) do
+ local preset=CutscenePresets.Get(hero.Id)
+ if hero.Tier>=5 then
+  cinematicCount+=1
+  check(preset and not titles[preset.Title] and not seeds[preset.Seed] and preset.Count<=18 and CutscenePresets.Duration(hero.Tier)<=4.4,"unique bounded cutscene preset: "..hero.Id)
+  titles[preset.Title]=true;seeds[preset.Seed]=true
+ else check(preset==nil,"lower tier keeps quick reveal: "..hero.Id) end
+end
+check(cinematicCount==26,"all 26 Mythic, Secret and Super Secret fighters have scenes")

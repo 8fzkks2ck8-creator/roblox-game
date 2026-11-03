@@ -5,9 +5,9 @@ local function signal()
  return {Connect=function(_,fn)
   local entry={Fn=fn,Active=true};table.insert(callbacks,entry)
   return {Disconnect=function() entry.Active=false end}
- end,Fire=function(_,...) for _,entry in ipairs(table.clone(callbacks)) do if entry.Active then entry.Fn(...) end end end}
+ end,Count=function() local n=0;for _,entry in ipairs(callbacks) do if entry.Active then n+=1 end end;return n end,Fire=function(_,...) for _,entry in ipairs(table.clone(callbacks)) do if entry.Active then entry.Fn(...) end end end}
 end
-local eventNames={Activated=true,MouseEnter=true,MouseLeave=true,Changed=true,CharacterAdded=true,OnClientEvent=true}
+local eventNames={Activated=true,FocusLost=true,MouseEnter=true,MouseLeave=true,Changed=true,Destroying=true,CharacterAdded=true,OnClientEvent=true}
 local oldIndex=nodeMeta.__index
 nodeMeta.__index=function(t,k)
  local value=oldIndex(t,k);if value~=nil then return value end
@@ -16,6 +16,11 @@ nodeMeta.__index=function(t,k)
   if not signals[k] then signals[k]=signal() end;return signals[k]
  end
  return methods.FindFirstChild(t,k)
+end
+local oldDestroy=methods.Destroy
+function methods:Destroy()
+ local signals=rawget(self,"_signals");if signals and signals.Destroying then signals.Destroying:Fire() end
+ oldDestroy(self)
 end
 local oldNewIndex=nodeMeta.__newindex
 nodeMeta.__newindex=function(t,k,v)
@@ -76,7 +81,7 @@ local delays={}
 task.delay=function(seconds,fn) table.insert(delays,{Seconds=seconds,Fn=fn}) end
 local rs=Instance.new("ReplicatedStorage")
 local shared=Instance.new("Folder",rs);shared.Name="AnimeRift";shared:SetAttribute("ServerStatus","Ready")
-for _,name in ipairs({"Config","Polish","ClientLayout","TitleScreen","OutfitDetails","IdleMotion"}) do local module=Instance.new("ModuleScript",shared);module.Name=name end
+for _,name in ipairs({"Config","Polish","ClientLayout","TitleScreen","OutfitDetails","IdleMotion","SummonCinematics"}) do local module=Instance.new("ModuleScript",shared);module.Name=name end
 local request=Instance.new("RemoteFunction",shared);request.Name="Request"
 local events=Instance.new("RemoteEvent",shared);events.Name="Event"
 local user=Instance.new("Player");user.UserId=123
@@ -92,13 +97,16 @@ services.RunService.RenderStepped=signal()
 local movementBlocked=false
 services.ContextActionService={BindActionAtPriority=function() movementBlocked=true end,UnbindAction=function() movementBlocked=false end}
 workspace.CurrentCamera=Instance.new("Camera");workspace.CurrentCamera.ViewportSize=Vector2.new(390,844)
+local cineChunk=loadstring(CINEMATICS_SOURCE,"SummonCinematics")
+setfenv(cineChunk,setmetatable({script={Parent={WaitForChild=function() return CutscenePresets end}},require=function() return CutscenePresets end},{__index=getfenv()}))
+local cinematicModule=cineChunk()
 local titleModule=loadstring(TITLE_SOURCE,"TitleScreen")()
 local idleModule=loadstring(IDLE_SOURCE,"IdleMotion")()
 function methods:GetPivot() return CFrame.new() end
 local detailsModule=loadstring(DETAILS_SOURCE,"OutfitDetails")()
 local polishStub={Aura=function() end,ClearGuard=function() end,Train=function() end,Pulse=function() end,Guard=function() end}
 require=function(target)
- if target.Name=="IdleMotion" then return idleModule elseif target.Name=="TitleScreen" then return titleModule elseif target.Name=="OutfitDetails" then return detailsModule elseif target.Name=="Config" then return C elseif target.Name=="Polish" then return polishStub elseif target.Name=="ClientLayout" then return L end
+ if target.Name=="SummonCinematics" then return cinematicModule elseif target.Name=="IdleMotion" then return idleModule elseif target.Name=="TitleScreen" then return titleModule elseif target.Name=="OutfitDetails" then return detailsModule elseif target.Name=="Config" then return C elseif target.Name=="Polish" then return polishStub elseif target.Name=="ClientLayout" then return L end
  error("Unexpected require")
 end
 loadstring(CLIENT_SOURCE,"Client")()

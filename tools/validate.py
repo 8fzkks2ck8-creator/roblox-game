@@ -9,8 +9,8 @@ def run(luau, compiler=None):
         assert ']====]' not in s
         return '[====[' + s + ']====]'
     sources = '\n'.join(f'local {name}_SOURCE={literal((ROOT/path).read_text())}' for name,path in [
-        ('IDLE','src/shared/IdleMotion.luau'), ('TITLE','src/shared/TitleScreen.luau'), ('DETAILS','src/shared/OutfitDetails.luau'), ('SERVER','src/server/Server.server.luau'), ('CLIENT','src/client/Client.client.luau'), ('LAYOUT','src/shared/ClientLayout.luau'), ('CONFIG','src/shared/Config.luau'), ('CLICKER','src/server/Clicker.luau'), ('PROFILES','src/server/Profiles.luau'), ('WORLD','src/server/World.luau')])
-    test = (ROOT/'tests/roblox_mock.luau').read_text() + '\n' + sources + '\n' + (ROOT/'tests/regressions.luau').read_text() + '\n' + (ROOT/'tests/client_smoke.luau').read_text() + '\n' + (ROOT/'tests/server_smoke.luau').read_text()
+        ('PRESETS','src/shared/SummonPresets.luau'), ('CINEMATICS','src/shared/SummonCinematics.luau'), ('IDLE','src/shared/IdleMotion.luau'), ('TITLE','src/shared/TitleScreen.luau'), ('DETAILS','src/shared/OutfitDetails.luau'), ('SERVER','src/server/Server.server.luau'), ('CLIENT','src/client/Client.client.luau'), ('LAYOUT','src/shared/ClientLayout.luau'), ('CONFIG','src/shared/Config.luau'), ('CLICKER','src/server/Clicker.luau'), ('PROFILES','src/server/Profiles.luau'), ('WORLD','src/server/World.luau')])
+    test = (ROOT/'tests/roblox_mock.luau').read_text() + '\n' + sources + '\n' + (ROOT/'tests/regressions.luau').read_text() + '\n' + (ROOT/'tests/client_smoke.luau').read_text() + '\n' + (ROOT/'tests/cinematic_smoke.luau').read_text() + '\n' + (ROOT/'tests/server_smoke.luau').read_text()
     with tempfile.TemporaryDirectory() as tmp:
         path=pathlib.Path(tmp)/'regressions.luau';path.write_text(test)
         result=subprocess.run([luau,str(path)],text=True,capture_output=True)
