@@ -76,7 +76,7 @@ local delays={}
 task.delay=function(seconds,fn) table.insert(delays,{Seconds=seconds,Fn=fn}) end
 local rs=Instance.new("ReplicatedStorage")
 local shared=Instance.new("Folder",rs);shared.Name="AnimeRift";shared:SetAttribute("ServerStatus","Ready")
-for _,name in ipairs({"Config","Polish","ClientLayout","TitleScreen","OutfitDetails"}) do local module=Instance.new("ModuleScript",shared);module.Name=name end
+for _,name in ipairs({"Config","Polish","ClientLayout","TitleScreen","OutfitDetails","IdleMotion"}) do local module=Instance.new("ModuleScript",shared);module.Name=name end
 local request=Instance.new("RemoteFunction",shared);request.Name="Request"
 local events=Instance.new("RemoteEvent",shared);events.Name="Event"
 local user=Instance.new("Player");user.UserId=123
@@ -93,10 +93,12 @@ local movementBlocked=false
 services.ContextActionService={BindActionAtPriority=function() movementBlocked=true end,UnbindAction=function() movementBlocked=false end}
 workspace.CurrentCamera=Instance.new("Camera");workspace.CurrentCamera.ViewportSize=Vector2.new(390,844)
 local titleModule=loadstring(TITLE_SOURCE,"TitleScreen")()
+local idleModule=loadstring(IDLE_SOURCE,"IdleMotion")()
+function methods:GetPivot() return CFrame.new() end
 local detailsModule=loadstring(DETAILS_SOURCE,"OutfitDetails")()
 local polishStub={Aura=function() end,ClearGuard=function() end,Train=function() end,Pulse=function() end,Guard=function() end}
 require=function(target)
- if target.Name=="TitleScreen" then return titleModule elseif target.Name=="OutfitDetails" then return detailsModule elseif target.Name=="Config" then return C elseif target.Name=="Polish" then return polishStub elseif target.Name=="ClientLayout" then return L end
+ if target.Name=="IdleMotion" then return idleModule elseif target.Name=="TitleScreen" then return titleModule elseif target.Name=="OutfitDetails" then return detailsModule elseif target.Name=="Config" then return C elseif target.Name=="Polish" then return polishStub elseif target.Name=="ClientLayout" then return L end
  error("Unexpected require")
 end
 loadstring(CLIENT_SOURCE,"Client")()
@@ -187,3 +189,14 @@ retryReady=true;retryTitle:Refresh()
 services.UserInputService.InputBegan:Fire({KeyCode=Enum.KeyCode.Return},false)
 check(retryPlayed and not movementBlocked,"Enter starts a ready title and restores controls")
 for _,delay in ipairs(delays) do if delay.Seconds==.42 then delay.Fn() end end
+
+check(idleModule.Profile("gojo").Speed<idleModule.Profile("deku").Speed,"calm and energetic characters have distinct idle timing")
+local idleRig=Instance.new("Model",workspace)
+local idleNeck=Instance.new("Motor6D",idleRig);idleNeck.Name="Neck";idleNeck.C0=CFrame.new()
+local idleBase=idleNeck.C0
+local simulation={PreSimulation=signal()}
+local stopIdle=idleModule.Mount(idleRig,"gojo",simulation)
+simulation.PreSimulation:Fire()
+check(idleNeck.C0~=idleBase,"procedural idle adds a tiny pose offset")
+stopIdle()
+check(idleNeck.C0==idleBase,"stopping an idle restores the original joint pose")

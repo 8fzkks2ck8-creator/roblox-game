@@ -93,6 +93,10 @@ function W.Build()
    part("Side terrace grass", Vector3.new(16, 1.5, 41), Vector3.new(side * 120, 16.8, z), green)
   end
  end
+ -- Additional raised grass studs flank the avenue; they are cosmetic and noncolliding.
+ for _,side in ipairs({-1,1}) do for x=22,38,4 do for z=-88,88,8 do
+  decor(part("Raised grass stud",Vector3.new(.9,.14,.9),Vector3.new(side*x,.48,z),green))
+ end end end
  -- Transparent boundaries cover the front edge as well as the cliff-backed edges.
  for _, x in ipairs({-112, 112}) do local p = part("Island boundary", Vector3.new(1, 80, 204), Vector3.new(x, 40, 0), white); p.Transparency = 1 end
  for _, z in ipairs({-102, 102}) do local p = part("Island boundary", Vector3.new(224, 80, 1), Vector3.new(0, 40, z), white); p.Transparency = 1 end

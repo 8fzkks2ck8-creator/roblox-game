@@ -12,6 +12,7 @@ local Polish=require(folder:WaitForChild("Polish"))
 local Layout=require(folder:WaitForChild("ClientLayout"))
 local TitleScreen=require(folder:WaitForChild("TitleScreen"))
 local OutfitDetails=require(folder:WaitForChild("OutfitDetails"))
+local IdleMotion=require(folder:WaitForChild("IdleMotion"))
 local Request=folder:WaitForChild("Request"); local Event=folder:WaitForChild("Event")
 local ui=Instance.new("ScreenGui"); ui.Name="AnimeRiftUI"; ui.ResetOnSpawn=false; ui.ZIndexBehavior=Enum.ZIndexBehavior.Sibling; ui.Parent=p:WaitForChild("PlayerGui")
 local canvas=Instance.new("Frame",ui); canvas.Size=UDim2.fromOffset(1200,760); canvas.AnchorPoint=Vector2.new(0.5,0.5); canvas.Position=UDim2.fromScale(0.5,0.5); canvas.BackgroundTransparency=1
@@ -226,6 +227,12 @@ local function icon(parent,kind,color)
  local holder=Instance.new("Frame",parent); holder.Size=UDim2.fromOffset(60,50); holder.Position=UDim2.fromOffset(16,5); holder.BackgroundTransparency=1; holder.ZIndex=2
  local assets=folder:FindFirstChild("Assets")
  local icons=assets and assets:FindFirstChild("GUIIcons")
+ local pack=assets and assets:FindFirstChild("UIMegaPack")
+ local mapping={Shop="Shop",Summon="Luck",Inventory="Inventory",Cosmetics="Super Gem's",Wheel="WheelSpin",Codes="Code's"}
+ local packed=pack and pack:FindFirstChild(mapping[kind] or kind)
+ if packed and (packed:IsA("ImageButton") or packed:IsA("ImageLabel")) and packed.Image~="" then
+  local image=Instance.new("ImageLabel",holder);image.Name="MegaPackIcon";image.BackgroundTransparency=1;image.Size=UDim2.fromScale(1,1);image.Image=packed.Image;image.ImageRectOffset=packed.ImageRectOffset;image.ImageRectSize=packed.ImageRectSize;image.ScaleType=Enum.ScaleType.Fit;return
+ end
  local template=icons and icons:FindFirstChild(kind)
  if template and template:IsA("ImageLabel") and template.Image~="" then
   local image=template:Clone();image.Name="CustomIcon";image.Size=UDim2.fromScale(1,1);image.Position=UDim2.new();image.AnchorPoint=Vector2.new(0,0);image.Visible=true;image.Parent=holder
@@ -272,6 +279,8 @@ for i,v in ipairs(nav) do
 end
 local topSell=button(canvas,"SELL",220,54,palette.Gold,function() open("Sell") end); topSell.Position=UDim2.fromOffset(275,7); topSell.Label.TextSize=30; gleam(topSell,190,54)
 local topRebirth=button(canvas,"REBIRTH",220,54,palette.Mint,function() open("Rebirth") end);topRebirth.Position=UDim2.fromOffset(745,7);topRebirth.Label.TextSize=29;gleam(topRebirth,190,54)
+icon(topSell,"Money",palette.Gold);topSell.Label.Position=UDim2.fromOffset(70,0);topSell.Label.Size=UDim2.new(1,-74,1,-6);topSell.Label.TextSize=25
+icon(topRebirth,"Rebirth",palette.Pink);topRebirth.Label.Position=UDim2.fromOffset(70,0);topRebirth.Label.Size=UDim2.new(1,-74,1,-6);topRebirth.Label.TextSize=24
 local topFighters=button(canvas,"FIGHTERS",220,54,palette.Cyan,function() open("Inventory") end);topFighters.Position=UDim2.fromOffset(510,7);topFighters.Label.TextSize=28
 local shop=button(canvas,"STARTER PACK",205,110,palette.Gold,function() selectedProduct="Starter"; open("Shop") end); shop.Position=UDim2.fromOffset(10,240); shop.Label.Position=UDim2.fromOffset(6,3); shop.Label.Size=UDim2.fromOffset(193,30); shop.Label.TextXAlignment=Enum.TextXAlignment.Left
 label(shop,"Sasuke + 5 spins\n+ 1 boosted ticket",UDim2.fromOffset(190,43),UDim2.fromOffset(7,34),16)
@@ -331,7 +340,7 @@ local function portrait(parent,id,pos,size,spin)
   display.Parent=wm;display:PivotTo(CFrame.new())
   local cf,sz=display:GetBoundingBox();local distance=math.max(sz.X,sz.Y,sz.Z)*2
   camera.CFrame=CFrame.lookAt(cf.Position+Vector3.new(distance*0.35,sz.Y*0.12,-distance),cf.Position)
-  if spin then spinningPreviews[view]={Model=display,Base=display:GetPivot(),Started=os.clock()} end
+  spinningPreviews[view]={Model=display,Base=display:GetPivot(),Started=os.clock(),Idle=not spin,Id=id}
   return view
  end
  if not outfit then outfit=C.Outfits.yamcha end
@@ -349,7 +358,7 @@ local function portrait(parent,id,pos,size,spin)
   for i=-2,2 do local hair=block("Hair",Vector3.new(0.25,0.5,0.8),Vector3.new(i*0.2,2,0),outfit.Hair); hair.Rotation=Vector3.new(0,0,-i*12) end
  end
  OutfitDetails.Apply(display,outfit,display,true)
- if spin then spinningPreviews[view]={Model=display,Base=display:GetPivot(),Started=os.clock()} end
+ spinningPreviews[view]={Model=display,Base=display:GetPivot(),Started=os.clock(),Idle=not spin,Id=id}
  return view
 end
 renderInventory=function()
@@ -675,7 +684,10 @@ Run.RenderStepped:Connect(function()
  end
  for view,spin in pairs(spinningPreviews) do
   if view.Parent and spin.Model.Parent then
-   spin.Model:PivotTo(spin.Base*CFrame.Angles(0,(now-spin.Started)*math.rad(C.UI.RevealSpinSpeed),0))
+   if spin.Idle then
+    local profile=IdleMotion.Profile(spin.Id);local t=(now-spin.Started)*profile.Speed
+    spin.Model:PivotTo(spin.Base*CFrame.new(0,math.sin(t)*.04,0)*CFrame.Angles(0,math.sin(t*.6)*.025,math.sin(t)*profile.Lean*.25))
+   else spin.Model:PivotTo(spin.Base*CFrame.Angles(0,(now-spin.Started)*math.rad(C.UI.RevealSpinSpeed),0)) end
   else spinningPreviews[view]=nil end
  end
  if os.clock()-lastTick<0.1 then return end; lastTick=os.clock()

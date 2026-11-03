@@ -2,6 +2,7 @@
 local C=require(game.ReplicatedStorage.AnimeRift.Config)
 local Effects=require(game.ReplicatedStorage.AnimeRift.Effects)
 local Details=require(game.ReplicatedStorage.AnimeRift.OutfitDetails)
+local RigRepair=require(game.ReplicatedStorage.AnimeRift.RigRepair)
 local A={}
 local GetData
 local function model(p) return p.Character end
@@ -13,6 +14,7 @@ local function decorate(p)
  local d=GetData(p); if not d then return end
  local h=C.Find(C.Characters,d.Equipped)
  if not h then
+  m:SetAttribute("RiftIdleId",nil)
   for _,name in ipairs({"RiftOutline","RiftOutfit"}) do local old=m:FindFirstChild(name);if old then old:Destroy() end end
   local root=m:FindFirstChild("HumanoidRootPart");local tag=root and root:FindFirstChild("HeroTag");if tag then tag:Destroy() end
   if m:GetAttribute("RiftStyled") or m:GetAttribute("RiftCharacterId") then p:LoadCharacterAsync() end
@@ -23,28 +25,19 @@ local function decorate(p)
  local assets=game.ReplicatedStorage.AnimeRift:FindFirstChild("Assets")
  local templates=assets and assets:FindFirstChild("CharacterModels")
  local custom=templates and templates:FindFirstChild(h.Id)
- if custom and (not custom:IsA("Model") or not custom:FindFirstChildOfClass("Humanoid") or not custom:FindFirstChild("HumanoidRootPart") or not custom.HumanoidRootPart:IsA("BasePart")) then
-  warn("Invalid custom rig for "..h.Id.."; using default avatar outfit.");custom=nil
- end
- if m:GetAttribute("RiftCharacterId") and not (custom and custom:IsA("Model")) and p:IsA("Player") then p:LoadCharacterAsync();return end
+ if custom and not custom:IsA("Model") then custom=nil end
+ if m:GetAttribute("RiftCharacterId") and not custom and p:IsA("Player") then p:LoadCharacterAsync();return end
  local usingCustom=m:GetAttribute("RiftCharacterId")==h.Id
- if custom and custom:IsA("Model") and not usingCustom and p:IsA("Player") then
-  if custom:FindFirstChildOfClass("Humanoid") and custom:FindFirstChild("HumanoidRootPart") then
-   local replacement=custom:Clone();replacement.Name=p.Name;replacement:SetAttribute("RiftCharacterId",h.Id)
-   local keptAnimate=false
-   for _,v in ipairs(replacement:GetDescendants()) do
-    if v:IsA("LuaSourceContainer") then
-     if v:IsA("LocalScript") and v.Name=="Animate" and v.Parent==replacement and not keptAnimate then keptAnimate=true else v:Destroy() end
-    elseif v:IsA("BasePart") then v.Anchored=false end
-   end
-   local animate=m:FindFirstChild("Animate"); if animate and not replacement:FindFirstChild("Animate") then animate:Clone().Parent=replacement end
-   local rh=replacement:FindFirstChildOfClass("Humanoid")
-   if not rh:FindFirstChildOfClass("Animator") then Instance.new("Animator",rh) end
-   rh.MaxHealth=100;rh.Health=100
-   replacement.HumanoidRootPart.CanCollide=false
-   replacement.PrimaryPart=replacement.HumanoidRootPart;replacement.Parent=workspace;replacement:PivotTo(m:GetPivot())
+ if custom and not usingCustom then
+  local replacement,reason=RigRepair.Prepare(custom)
+  if replacement then
+   replacement.Name=p.Name;replacement:SetAttribute("RiftCharacterId",h.Id);replacement:SetAttribute("RiftIdleId",h.Id)
+   local animate=m:FindFirstChild("Animate")
+   if animate and animate:IsA("LocalScript") then animate:Clone().Parent=replacement end
+   replacement.Parent=workspace;replacement:PivotTo(m:GetPivot())
    p.Character=replacement;m:Destroy();return
-  else warn("CharacterModels/"..h.Id.." needs a Humanoid and HumanoidRootPart; using fallback.") end
+  end
+  warn("Could not prepare "..h.Id..": "..tostring(reason).."; using the built-in outfit.")
  end
  if not usingCustom then
  local outfit=C.Outfits[h.Id] or C.Outfits.yamcha
@@ -65,6 +58,8 @@ local function decorate(p)
  end
  Details.Apply(m,outfit,hair,false)
  end
+ m:SetAttribute("RiftIdleId",h.Id)
+ for _,part in ipairs(m:GetChildren()) do if part:IsA("Part") then part.TopSurface=Enum.SurfaceType.Studs;part.BottomSurface=Enum.SurfaceType.Studs;part.FrontSurface=Enum.SurfaceType.Studs;part.BackSurface=Enum.SurfaceType.Studs end end
  Effects.ApplyAnimations(m,h.Id)
  local highlight=m:FindFirstChild("RiftOutline") or Instance.new("Highlight"); highlight.Name="RiftOutline"; highlight.FillTransparency=1; highlight.OutlineColor=h.Color; highlight.OutlineTransparency=0.3; highlight.Parent=m
  local r=root(p); if not r then return end

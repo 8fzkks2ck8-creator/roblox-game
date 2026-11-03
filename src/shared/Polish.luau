@@ -4,6 +4,24 @@ local Run=game:GetService("RunService")
 local Tween=game:GetService("TweenService")
 local Debris=game:GetService("Debris")
 local C=require(script.Parent.Config)
+local Idle=require(script.Parent.IdleMotion)
+local idleStops={}
+local function bindIdle(character)
+ if not character:IsA("Model") then return end
+ local function update()
+  if idleStops[character] then idleStops[character]();idleStops[character]=nil end
+  local id=character:GetAttribute("RiftIdleId")
+  if id then idleStops[character]=Idle.Mount(character,id,Run) end
+ end
+ character:GetAttributeChangedSignal("RiftIdleId"):Connect(update)
+ character.Destroying:Once(function() if idleStops[character] then idleStops[character]();idleStops[character]=nil end end)
+ update()
+end
+for _,player in ipairs(game:GetService("Players"):GetPlayers()) do
+ player.CharacterAdded:Connect(function(character) task.defer(bindIdle,character) end)
+ if player.Character then bindIdle(player.Character) end
+end
+game:GetService("Players").PlayerAdded:Connect(function(player) player.CharacterAdded:Connect(function(character) task.defer(bindIdle,character) end) end)
 local last=0
 local pulses={}
 local floating={}
@@ -54,11 +72,11 @@ function P.Train(character,id)
  -- Tiny local shoulder punch; restores the exact base pose after each click.
  local joint=character:FindFirstChild("RightShoulder",true) or character:FindFirstChild("Right Shoulder",true)
  if joint and joint:IsA("Motor6D") and not pulses[joint] and not joint:GetAttribute("RiftCasting") then
-  local base=joint.C0;pulses[joint]=base
+  local base=joint.C0;pulses[joint]=base;joint:SetAttribute("RiftPunch",true)
   Tween:Create(joint,TweenInfo.new(.07),{C0=base*CFrame.Angles(math.rad(55),0,math.rad(-12))}):Play()
   task.delay(.08,function()
    if joint.Parent then Tween:Create(joint,TweenInfo.new(.1),{C0=base}):Play() end
-   task.delay(.11,function() pulses[joint]=nil end)
+   task.delay(.11,function() pulses[joint]=nil;if joint.Parent then joint:SetAttribute("RiftPunch",nil) end end)
   end)
  end
 end

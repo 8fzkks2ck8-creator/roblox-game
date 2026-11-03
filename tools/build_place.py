@@ -2,6 +2,7 @@
 """Preserve uploaded assets/services and inject editable source plus a static map preview."""
 import argparse, base64, copy, pathlib, xml.etree.ElementTree as ET
 from validate import ROOT, run
+from import_ui_pack import import_pack
 
 def name(item):
     e=item.find("Properties/*[@name='Name']")
@@ -91,6 +92,7 @@ def build(luau,compiler,output):
         for prior in list(light.findall('Item')):
             if name(prior)==data['props']['Name']: light.remove(prior)
         light.append(xml_node(data,seq))
+    import_pack(rift,root)
     output.parent.mkdir(parents=True,exist_ok=True)
     tree.write(output,encoding='utf-8',xml_declaration=True)
     # Verify the exported source is exact and all original imported rigs remain.
