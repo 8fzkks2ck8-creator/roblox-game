@@ -14,6 +14,8 @@ Every Mythic-and-up fighter has a unique setting/signature recipe in `SignatureS
 
 Summons now use a client-only **world stage**, so the supplied pack's ParticleEmitters can actually render. The actor, scenery and FX are anchored and non-colliding in an isolated location; the gameplay character is not teleported. The scripted camera and movement/Skip bindings are restored on completion, Skip, cancellation, replacement or failure. Geometry/projection and lifecycle tests do not replace Studio rendering/device tests.
 
+The renderer keeps pose calculations in a hidden WorldModel and copies only finalized transforms into a separate anchored render clone. Visible parts and particle anchors never shuttle through the map origin. It reuses the existing gameplay camera without swapping camera objects, restores its frame/focus/lens state afterward, and cancels if another system selects a different camera. Regression checks cover 60 consecutive updates and camera ownership loss.
+
 ### Swap meshes, VFX and sound in Studio
 
 Stop Play first. In Explorer, open:

@@ -16,8 +16,9 @@ function S.Attach(view,ctx,duration)
  local c={Enabled=ctx.UseWorldStage==true,FXInstances=0,Emitters=0}
  local reduced=ctx.ReducedEffects==true or Input.TouchEnabled==true
  local container,camera,original,saved,controls
+ local renderParts={}
  local fx={} -- pools are created once, never while a shot updates
- local sounds={};local done=false;local shifted=false
+ local sounds={};local done=false
  local offset=CFrame.new(12000,6000,12000)
  local function safeClone(template,parent)
   if #template:GetDescendants()>S.Budget.MaxTemplateDescendants then warn("Cutscene template too large: "..template.Name);return nil end
@@ -57,8 +58,8 @@ function S.Attach(view,ctx,duration)
    Actions:UnbindAction("RiftSummonStage")
    Actions:UnbindAction("RiftSummonSkip")
    if controls then controls:Enable();controls=nil end
-   if workspace.CurrentCamera==camera and original and original.Parent then
-    workspace.CurrentCamera=original;original.CFrame=saved.CFrame;original.FieldOfView=saved.FOV;original.CameraType=saved.Type;original.CameraSubject=saved.Subject
+   if original and original.Parent then
+    original.CFrame=saved.CFrame;original.Focus=saved.Focus;original.FieldOfView=saved.FOV;original.CameraType=saved.Type;original.CameraSubject=saved.Subject
    end
    if container then container:Destroy() end
   end
@@ -67,13 +68,45 @@ function S.Attach(view,ctx,duration)
  if c.Enabled then
   original=workspace.CurrentCamera
   assert(original,"No gameplay camera")
-  saved={CFrame=original.CFrame,FOV=original.FieldOfView,Type=original.CameraType,Subject=original.CameraSubject}
+  saved={CFrame=original.CFrame,Focus=original.Focus,FOV=original.FieldOfView,Type=original.CameraType,Subject=original.CameraSubject}
   container=Instance.new("Model");container.Name="LocalSummonStage" -- client-only, no replication or gameplay physics
   local world=view:FindFirstChildOfClass("WorldModel");assert(world,"Missing character stage")
-  for _,child in ipairs(world:GetChildren()) do child.Parent=container end
-  container.Parent=workspace
-  camera=view.CurrentCamera;camera.Parent=container;camera.CameraType=Enum.CameraType.Scriptable
-  workspace.CurrentCamera=camera;view.Visible=false
+  -- Keep pose calculations in the hidden WorldModel near the origin. Only
+  -- finalized transforms are copied to anchored render clones in Workspace.
+  -- Never shuttle live parts/cameras through the origin between shot updates.
+  for _,child in ipairs(world:GetChildren()) do
+   local sourceNodes=descendants(child);local previousKeys={}
+   for i,source in ipairs(sourceNodes) do if source:IsA("BasePart") then
+    previousKeys[i]=source:GetAttribute("__RiftRenderBinding");source:SetAttribute("__RiftRenderBinding",i)
+   end end
+   local clone=child:Clone()
+   local cloneNodes=descendants(clone)
+   assert(#sourceNodes==#cloneNodes,"Cinematic render clone changed hierarchy")
+   for _,target in ipairs(cloneNodes) do
+    if target:IsA("BasePart") then
+     local key=target:GetAttribute("__RiftRenderBinding");local source=sourceNodes[key]
+     assert(source and source:IsA("BasePart"),"Missing render part binding")
+     target:SetAttribute("__RiftRenderBinding",previousKeys[key])
+     target.Anchored=true;target.CanCollide=false;target.CanTouch=false;target.CanQuery=false
+     target.CFrame=offset*source.CFrame
+     table.insert(renderParts,{Source=source,Target=target})
+    end
+   end
+   for i,source in ipairs(sourceNodes) do if source:IsA("BasePart") then source:SetAttribute("__RiftRenderBinding",previousKeys[i]) end end
+   for _,v in ipairs(cloneNodes) do
+    if v:IsA("LuaSourceContainer") or v:IsA("Animator") then v:Destroy()
+    elseif v:IsA("JointInstance") or v:IsA("WeldConstraint") or v:IsA("Constraint") then pcall(function() v.Enabled=false end)
+    elseif v:IsA("Humanoid") then
+     v.RequiresNeck=false;v.BreakJointsOnDeath=false;v.DisplayDistanceType=Enum.HumanoidDisplayDistanceType.None
+     pcall(function() v.EvaluateStateMachine=false end)
+    end
+   end
+   clone.Parent=container
+  end
+  camera=view.CurrentCamera;view.Visible=false
+  -- Reuse the gameplay camera instead of selecting/destroying camera objects.
+  -- The private ViewportFrame camera is just the shot's local-coordinate input.
+  original.CameraType=Enum.CameraType.Scriptable
   Actions:BindActionAtPriority("RiftSummonStage",function() return Enum.ContextActionResult.Sink end,false,3100,Enum.PlayerActions.CharacterForward,Enum.PlayerActions.CharacterBackward,Enum.PlayerActions.CharacterLeft,Enum.PlayerActions.CharacterRight,Enum.PlayerActions.CharacterJump)
   Actions:BindActionAtPriority("RiftSummonSkip",function(_,state)
    if state==Enum.UserInputState.Begin and ctx.OnSkip then ctx.OnSkip() end
@@ -88,7 +121,7 @@ function S.Attach(view,ctx,duration)
    if ok and result and not done then controls=result;controls:Disable() end
   end) end
   -- These two low-intensity lights preserve mesh readability in a distant local set.
-  local anchor=Instance.new("Part");anchor.Name="StageKeyLight";anchor.Transparency=1;anchor.Size=Vector3.one;anchor.Anchored=true;anchor.CanCollide=false;anchor.CanQuery=false;anchor.CanTouch=false;anchor.CFrame=CFrame.new(2,7,-7);anchor.Parent=container
+  local anchor=Instance.new("Part");anchor.Name="StageKeyLight";anchor.Transparency=1;anchor.Size=Vector3.one;anchor.Anchored=true;anchor.CanCollide=false;anchor.CanQuery=false;anchor.CanTouch=false;anchor.CFrame=offset*CFrame.new(2,7,-7);anchor.Parent=container
   local light=Instance.new("PointLight");light.Parent=anchor;light.Brightness=1.2;light.Range=48;light.Color=Color3.new(1,1,1);light.Shadows=false
  end
  local sceneAssets=ctx.SceneAssets
@@ -97,7 +130,7 @@ function S.Attach(view,ctx,duration)
   for _,spec in ipairs({{"OpeningFX",.08},{"ChargeFX",.28},{"ImpactFX",.55}}) do
    local template=sceneAssets:FindFirstChild(spec[1])
    if template then
-    local anchor=Instance.new("Part");anchor.Name=spec[1].."Anchor";anchor.Size=Vector3.one;anchor.Transparency=1;anchor.Anchored=true;anchor.CanCollide=false;anchor.CanTouch=false;anchor.CanQuery=false;anchor.CFrame=CFrame.new(0,spec[1]=="ImpactFX" and -1 or 0,0);anchor.Parent=parent
+    local anchor=Instance.new("Part");anchor.Name=spec[1].."Anchor";anchor.Size=Vector3.one;anchor.Transparency=1;anchor.Anchored=true;anchor.CanCollide=false;anchor.CanTouch=false;anchor.CanQuery=false;anchor.CFrame=offset*CFrame.new(0,spec[1]=="ImpactFX" and -1 or 0,0);anchor.Parent=parent
     local clone=safeClone(template,anchor)
     if clone then
      if clone:IsA("Model") then clone:PivotTo(anchor.CFrame)
@@ -121,20 +154,32 @@ function S.Attach(view,ctx,duration)
    end
   end
  end
+ if container then container.Parent=workspace end
  end
  local ok,err=xpcall(initialize,debug.traceback)
  if not ok then c:Destroy();error(err) end
  function c:Before()
-  if done or not self.Enabled or not shifted then return end
-  for _,v in ipairs(container:GetDescendants()) do if v:IsA("BasePart") then v.CFrame=offset:Inverse()*v.CFrame end end
-  camera.CFrame=offset:Inverse()*camera.CFrame;shifted=false
+  -- Compatibility hook: source poses never leave their private WorldModel.
  end
  function c:After(progress)
   if done then return end
   if self.Enabled then
-   for _,v in ipairs(container:GetDescendants()) do if v:IsA("BasePart") then v.CFrame=offset*v.CFrame end end
-   camera.CFrame=offset*camera.CFrame;shifted=true
-   camera.Focus=camera.CFrame*CFrame.new(0,0,-10)
+   if workspace.CurrentCamera~=original or not original.Parent then
+    self:Destroy()
+    if ctx.OnSkip then ctx.OnSkip() end
+    return
+   end
+   for _,entry in ipairs(renderParts) do
+    local source,target=entry.Source,entry.Target
+    target.CFrame=offset*source.CFrame
+    if target.Size~=source.Size then target.Size=source.Size end
+    if target.Transparency~=source.Transparency then target.Transparency=source.Transparency end
+    if target.Color~=source.Color then target.Color=source.Color end
+    if target.Material~=source.Material then target.Material=source.Material end
+    if source:IsA("Part") and target.Shape~=source.Shape then target.Shape=source.Shape end
+   end
+   original.CFrame=offset*camera.CFrame;original.FieldOfView=camera.FieldOfView
+   original.Focus=original.CFrame*CFrame.new(0,0,-10)
   end
   for _,entry in ipairs(fx) do if not entry.Fired and progress>=entry.At then
    entry.Fired=true

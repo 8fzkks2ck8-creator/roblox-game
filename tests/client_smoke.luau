@@ -40,6 +40,7 @@ function methods:WaitForChild(k) local result=self:FindFirstChild(k);assert(resu
 function methods:Clone()
  local result=Instance.new(self.ClassName)
  for key,value in pairs(self._props) do if key~="Parent" and key~="ClassName" then result[key]=value end end
+ for key,value in pairs(self._attrs) do result:SetAttribute(key,value) end
  for _,c in ipairs(self:GetChildren()) do c:Clone().Parent=result end
  return result
 end
@@ -52,6 +53,7 @@ Instance.new=function(class,parent)
  local item=oldNew(class,parent)
  if guiClasses[class] then item.Visible=true;item.Rotation=0 end
  if class=="NumberValue" then item.Value=0 end
+ if class=="Part" or class=="MeshPart" then item.CFrame=CFrame.new() end
  if class=="Camera" then item.CFrame=CFrame.new();item.FieldOfView=70;item.CameraType=Enum.CameraType.Custom;item.ViewportSize=Vector2.new(390,844) end
  if class=="ScrollingFrame" then item.CanvasPosition=Vector2.zero end
  return item

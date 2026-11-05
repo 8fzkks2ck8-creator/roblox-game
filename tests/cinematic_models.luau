@@ -318,9 +318,11 @@ do
    local scene=Scenes.Play({Id=id,Name=id,Tier=id=='broly' and 7 or 6},ctx)
    assert(scene and scene:IsPlaying(),'world scene did not start: '..id)
    local stage=workspace:FindFirstChild('LocalSummonStage');assert(stage,'missing real world stage')
-   assert(workspace.CurrentCamera~=savedCamera and workspace.CurrentCamera.CameraType==Enum.CameraType.Scriptable,'camera not captured')
+   assert(workspace.CurrentCamera==savedCamera and savedCamera.CameraType==Enum.CameraType.Scriptable,'gameplay camera identity changed')
    assert(actionBindings.RiftSummonStage and actionBindings.RiftSummonSkip,'movement/skip actions missing')
-   assert(actor:GetDescendants()[1] and select(1,actor:GetBoundingBox()).Position.Magnitude>1000,'actor not isolated from gameplay map')
+   assert(select(1,actor:GetBoundingBox()).Position.Magnitude<1000,'pose model left private local coordinates')
+   local rendered=stage:FindFirstChild(actor.Name);assert(rendered and select(1,rendered:GetBoundingBox()).Position.Magnitude>1000,'render clone not isolated from gameplay')
+   assert(not stage:FindFirstChildOfClass('Camera'),'stage owns a replacement camera')
    local before=made;local count=#stage:GetDescendants()
    now=scene.Metrics.Duration*.7;frames:Fire()
    assert(made==before and #stage:GetDescendants()==count,'world stage allocates per frame')
@@ -372,4 +374,50 @@ do
   print('PASS custom VFX sanitization and burst/lifetime limits: reduced='..tostring(reduced))
  end
  assets:Destroy()
+end
+
+-- Regression: Before/pose evaluation must never teleport live geometry or the
+-- camera through the map. Source models stay private and render clones commit once.
+do
+ local view=RealInstance.new('ViewportFrame');local world=RealInstance.new('WorldModel');world.Parent=view
+ local actor=RealInstance.new('Model');actor.Name='FlickerRegression';actor.Parent=world
+ local source=RealInstance.new('Part');source.Name='TrackedPart';source.CFrame=CFrame.new(1,2,3);source.Size=Vector3.one;source.Parent=actor
+ local localCamera=RealInstance.new('Camera');localCamera.CFrame=CFrame.new(0,2,-8);localCamera.FieldOfView=45;localCamera.Parent=view
+ local gameplay=workspace.CurrentCamera;local savedFrame=gameplay.CFrame;local savedFocus=gameplay.Focus
+ local scene=Stage.Attach(viewportProxy(view,localCamera),{UseWorldStage=true},1)
+ scene:After(0)
+ local live=workspace.LocalSummonStage.FlickerRegression.TrackedPart
+ local previous=live.CFrame;local originalLiveFrame=gameplay.CFrame
+ for i=1,60 do
+  scene:Before()
+  assert(close(live.CFrame,previous),'live part moved during Before')
+  assert(close(gameplay.CFrame,originalLiveFrame),'camera moved during Before')
+  source.CFrame=CFrame.new(1,i*.01,3)
+  localCamera.CFrame=CFrame.new(0,2+i*.01,-8)
+  assert(close(live.CFrame,previous),'private pose calculation changed a live part')
+  assert(close(gameplay.CFrame,originalLiveFrame),'private camera update changed gameplay camera')
+  scene:After(i/100)
+  assert(workspace.CurrentCamera==gameplay,'camera object swapped during a shot')
+  assert(live.CFrame.Position.Magnitude>1000 and gameplay.CFrame.Position.Magnitude>1000,'visible stage/camera visited gameplay origin')
+  assert(source.CFrame.Position.Magnitude<10,'source coordinates accumulate offsets')
+  previous=live.CFrame;originalLiveFrame=gameplay.CFrame
+ end
+ scene:Destroy()
+ assert(close(gameplay.CFrame,savedFrame) and close(gameplay.Focus,savedFocus),'camera frame/focus not restored')
+ view:Destroy()
+ print('PASS flicker regression: 60 updates, private poses, stable live parts, one camera, restored frame/focus')
+end
+
+-- A camera selected by another system must not be overwritten by a stale shot.
+do
+ local view=RealInstance.new('ViewportFrame');local world=RealInstance.new('WorldModel');world.Parent=view
+ local part=RealInstance.new('Part');part.CFrame=CFrame.new();part.Parent=world
+ local shotCamera=RealInstance.new('Camera');shotCamera.CFrame=CFrame.new();shotCamera.Parent=view
+ local original=workspace.CurrentCamera
+ local stage=Stage.Attach(viewportProxy(view,shotCamera),{UseWorldStage=true},1)
+ local foreign=RealInstance.new('Camera');foreign.Parent=workspace;foreign.CFrame=CFrame.new(3,4,5)
+ workspace.CurrentCamera=foreign;stage:After(.5)
+ assert(workspace.CurrentCamera==foreign and not workspace:FindFirstChild('LocalSummonStage'),'stale stage fought another camera owner')
+ workspace.CurrentCamera=original;foreign:Destroy();view:Destroy()
+ print('PASS camera ownership loss cancels stage without replacing the new camera')
 end
