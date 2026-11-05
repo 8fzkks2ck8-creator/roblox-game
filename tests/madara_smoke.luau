@@ -81,3 +81,16 @@ do
  findButton("KEEP IT!").Activated:Fire()
  legacy:Destroy();cinematicModule.Play=actualPlay
 end
+
+-- Every high-tier recipe contains a setting and a distinct signature action.
+do
+ local settings,actions={},{};local count=0
+ for _,hero in ipairs(C.Characters) do if hero.Tier>=5 then
+  local scene=startScene(hero.Id)
+  assert(scene and scene:IsPlaying())
+  local setting=scene.Metrics.Setting;local action=scene.Metrics.Action
+  assert(setting and action and not settings[setting] and not actions[action],'missing or duplicate scene direction: '..hero.Id)
+  settings[setting]=true;actions[action]=true;count+=1;scene:Cancel()
+ end end
+ check(count==26,'all 26 high-tier fighters have distinct sets and signature actions')
+end

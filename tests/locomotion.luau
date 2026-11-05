@@ -26,8 +26,8 @@ local function locomotion(rig)
  local humanoid=character:FindFirstChildOfClass("Humanoid")
  humanoid.FloorMaterial=Enum.Material.Grass;humanoid.MoveDirection=Vector3.zero;humanoid.Sit=false
  local root=character.HumanoidRootPart
- local left=character.Torso["Left Hip"];local right=character.Torso["Right Hip"]
- local shoulder=character.Torso["Right Shoulder"]
+ local left=(character:FindFirstChild("LeftHip",true) or character.Torso["Left Hip"]);local right=(character:FindFirstChild("RightHip",true) or character.Torso["Right Hip"])
+ local shoulder=(character:FindFirstChild("RightShoulder",true) or character.Torso["Right Shoulder"])
  local leftBase,rightBase,shoulderBase=left.C0,right.C0,shoulder.C0
  local frames=signal();local now=0
  local stop=I.Mount(character,rig.Name,{PreSimulation=frames},function() return now end)
@@ -94,7 +94,7 @@ do
    local parent=Instance.new("Folder");character.Parent=parent
    local h=character:FindFirstChildOfClass("Humanoid");h.FloorMaterial=Enum.Material.Grass;h.Sit=false;h.MoveDirection=Vector3.zero
    local root=character.HumanoidRootPart;root.AssemblyLinearVelocity=Vector3.zero
-   local shoulder=character.Torso["Right Shoulder"];local base=shoulder.C0
+   local shoulder=(character:FindFirstChild("RightShoulder",true) or character.Torso["Right Shoulder"]);local base=shoulder.C0
    local frames=signal();local now=0;local stop=I.Mount(character,hero.Id,{PreSimulation=frames},function() return now end)
    now=.1;frames:Fire();assert(shoulder.C0~=base,"idle was not applied to the real rig: "..hero.Id)
    assert(shoulder.Transform==CFrame.new(),"authored Animator can override signature idle: "..hero.Id)
@@ -141,4 +141,56 @@ do
  for _,entry in joints do assert(entry.Joint.C0==entry.Base,"dead R15 did not release its gait") end
  stop();assert(event:Count()==0)
  print("PASS locomotion: default R15 joints and death cleanup")
+end
+
+-- Solve the real Motor6D chain: checking C0 alone missed deformed R15 carriers.
+-- Rest limbs must be upright and native R15 attachments must remain articulated.
+do
+ local place=roblox.deserializePlace(fs.readFile(uploaded or 'assets/AnimeRift.with-packs.rbxl'))
+ local signatures={};local checked=0
+ for _,hero in C.Characters do
+  local gait=I.WalkProfile(hero.Id)
+  assert(gait and gait.Title~='Natural stride','missing unique walk: '..hero.Id)
+  local key=string.format('%.4f/%.4f/%.4f/%.4f',gait.Cadence,gait.Stride,gait.Arms,gait.Lean)
+  assert(not signatures[key],'duplicate gait: '..hero.Id);signatures[key]=true
+ end
+ for _,source in place.ReplicatedStorage.AnimeRift.Assets.CharacterModels:GetChildren() do
+  if source:IsA('Model') then
+   local rig=assert(R.Prepare(source));local root=rig.HumanoidRootPart
+   local native=rig.Humanoid.RigType==Enum.HumanoidRigType.R15
+   if source.Name=='vegeta' or source.Name=='madara' or source.Name=='naruto' then assert(native,'R15 rig converted to R6: '..source.Name) end
+   local arm=rig:FindFirstChild(native and 'RightUpperArm' or 'Right Arm')
+   local leg=rig:FindFirstChild(native and 'RightUpperLeg' or 'Right Leg')
+   assert(arm and leg)
+   assert(arm.CFrame.UpVector:Dot(root.CFrame.UpVector)>.98,'arm starts in baked/distorted pose: '..source.Name)
+   assert(leg.CFrame.UpVector:Dot(root.CFrame.UpVector)>.98,'leg starts in baked/distorted pose: '..source.Name)
+   local motors,skins,sizes={},{},{}
+   for _,v in rig:GetDescendants() do
+    if v:IsA('Motor6D') then table.insert(motors,v)
+    elseif v:IsA('WeldConstraint') then table.insert(skins,{v.Part0,v.Part1,v.Part0.CFrame:ToObjectSpace(v.Part1.CFrame)}) end
+    if v:IsA('BasePart') then sizes[v]=v.Size end
+   end
+   local parent=Instance.new('Folder');rig.Parent=parent
+   local h=rig.Humanoid;h.FloorMaterial=Enum.Material.Grass;h.MoveDirection=Vector3.zero;h.Sit=false
+   root.AssemblyLinearVelocity=Vector3.new(0,0,-16)
+   local frames=signal();local now=0;local stop=I.Mount(rig,source.Name,{PreSimulation=frames},function() return now end)
+   for step=1,50 do
+    now=step*.05;frames:Fire()
+    local reached={[root]=true}
+    for _=1,16 do for _,m in motors do if reached[m.Part0] and not reached[m.Part1] then
+     m.Part1.CFrame=m.Part0.CFrame*m.C0*m.Transform*m.C1:Inverse();reached[m.Part1]=true
+    end end end
+    for _,skin in skins do skin[2].CFrame=skin[1].CFrame*skin[3] end
+    for _,m in motors do
+     assert(reached[m.Part1],'disconnected body: '..source.Name..'/'..m.Name)
+     local a=m.Part0.CFrame*m.C0*m.Transform;local b=m.Part1.CFrame*m.C1
+     assert((a.Position-b.Position).Magnitude<.001,'joint separation: '..m.Name)
+    end
+    for part,size in sizes do assert(part.Size==size,'animation changed model proportions') end
+    assert(root.CFrame:PointToObjectSpace(leg.CFrame.Position).Y<.5,'leg folded into upper torso')
+   end
+   stop();rig:Destroy();parent:Destroy();checked+=1
+  end
+ end
+ print('PASS solved skeletons: '..checked..' real rigs, neutral limbs, continuous joints, unchanged proportions; 40 unique walks')
 end

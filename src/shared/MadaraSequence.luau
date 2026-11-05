@@ -3,14 +3,15 @@
 local M={Duration=9.6,Budget={MaxInstances=72,FPS=30,ReducedFPS=24}}
 local Run=game:GetService("RunService")
 local Input=game:GetService("UserInputService")
+local Stage=require(script.Parent:WaitForChild("CutsceneStage"))
 local function ramp(t,a,b) return math.clamp((t-a)/(b-a),0,1) end
 local function smooth(x) return x*x*(3-2*x) end
 function M.Play(item,ctx)
  local clock=ctx.Clock or os.clock
  local started=clock();local finished=false;local impacted=false;local spoken=false
- local connections={};local ui;local audio;local made=0
+ local connections={};local ui;local audio;local made=0;local worldStage;local curtain
  local reduced=ctx.ReducedEffects==true or Input.TouchEnabled==true
- local controller={Metrics={Effects=0,Particles=0,FPS=reduced and 24 or 30,Duration=M.Duration,Meteors=4}}
+ local controller={Metrics={Effects=0,Particles=0,FPS=reduced and 24 or 30,Duration=M.Duration,Meteors=4,Setting="Cliff horizon",Action="Meteors"}}
  local function make(class,parent)
   assert(made<M.Budget.MaxInstances,"Madara effect budget exceeded")
   local value=Instance.new(class);value.Parent=parent;made+=1;controller.Metrics.Effects=made;return value
@@ -18,6 +19,7 @@ function M.Play(item,ctx)
  local function finish(reason,destroying)
   if finished then return end;finished=true
   for _,connection in ipairs(connections) do connection:Disconnect() end
+  if worldStage then worldStage:Destroy() end
   if audio then audio:Destroy();audio=nil end
   if ui and not destroying then ui:Destroy() end
   if ctx.OnComplete then local ok,err=pcall(ctx.OnComplete,reason);if not ok then warn(tostring(err)) end end
@@ -55,7 +57,8 @@ function M.Play(item,ctx)
    p.Name=name;p.Size=size;p.CFrame=CFrame.new(position);p.Color=tint;p.Material=material or Enum.Material.Slate;p.Anchored=true;p.CanCollide=false;p.CanTouch=false;p.CanQuery=false;return p
   end
   local rock=Color3.fromRGB(84,77,76)
-  part("Cliff summit",Vector3.new(22,2.5,22),Vector3.new(0,-4.25,7),rock)
+  local meshes=ctx.SceneAssets and ctx.SceneAssets:FindFirstChild("Meshes")
+  part("Cliff summit",Vector3.new(22,2.5,22),Vector3.new(0,-4.25,7),rock,nil,meshes and meshes:FindFirstChild("StageMesh"))
   part("Cliff face",Vector3.new(19,52,17),Vector3.new(0,-31.5,7),rock:Lerp(Color3.new(0,0,0),.2))
   for i=1,5 do
    local p=part("Cliff strata",Vector3.new(20-i,4,17+i*.8),Vector3.new((i%2-.5)*2,-7-i*5,7),Color3.fromRGB(103-i*4,91-i*3,84-i*2))
@@ -97,7 +100,13 @@ function M.Play(item,ctx)
   -- slot prevents guessing that the old summon voice is the requested quote.
   local soundId=ctx.CinematicVoiceId or ""
   if soundId~="" then
-   audio=make("Sound",game:GetService("SoundService"));audio.Name="MadaraMeteorDialogue";audio.SoundId=soundId;audio.Volume=.65;audio.Looped=false;audio.PlayOnRemove=false
+   audio=make("Sound",game:GetService("SoundService"));audio.Name="MadaraMeteorDialogue";audio.SoundId=soundId;audio.Volume=.65*(ctx.SoundVolume or .35);audio.Looped=false;audio.PlayOnRemove=false
+  end
+  local stageContext=table.clone(ctx);stageContext.OnSkip=function() finish("Skipped") end
+  worldStage=Stage.Attach(view,stageContext,M.Duration)
+  if worldStage.Enabled then
+   sky.BackgroundTransparency=1
+   curtain=make("Frame",ui);curtain.Name="SceneFade";curtain.Size=UDim2.fromScale(1,1);curtain.BackgroundColor3=Color3.new(0,0,0);curtain.BorderSizePixel=0;curtain.ZIndex=30
   end
   table.insert(connections,skip.Activated:Connect(function() finish("Skipped") end))
   table.insert(connections,Input.InputBegan:Connect(function(input,processed) if not processed and (input.KeyCode==Enum.KeyCode.Space or input.KeyCode==Enum.KeyCode.ButtonB) then finish("Skipped") end end))
@@ -105,6 +114,7 @@ function M.Play(item,ctx)
   local function update(now)
    local t=math.max(0,now-started)
    if t>=M.Duration then finish("Completed");return end
+   worldStage:Before()
    local phase=t<2.2 and "Horizon" or t<4.1 and "Dialogue" or t<6.4 and "Meteors" or t<7.8 and "Impact" or "Whiteout"
    controller.Metrics.Phase=phase
    local from,target,fov
@@ -142,6 +152,8 @@ function M.Play(item,ctx)
    end
    white.BackgroundTransparency=1-smooth(ramp(t,7.8,8.8))
    root.GroupTransparency=1-ramp(t,0,.25)
+   if curtain then curtain.BackgroundTransparency=ramp(t,0,.25) end
+   worldStage:After(t/M.Duration)
   end
   local last=-math.huge
   table.insert(connections,Run.RenderStepped:Connect(function()

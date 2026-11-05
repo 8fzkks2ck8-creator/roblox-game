@@ -3,23 +3,67 @@
 local Scenes={}
 local Presets=require(script.Parent:WaitForChild("SummonPresets"))
 local Madara=require(script.Parent:WaitForChild("MadaraSequence"))
+local Stage=require(script.Parent:WaitForChild("CutsceneStage"))
+local Sets=require(script.Parent:WaitForChild("SignatureSets"))
 local Run=game:GetService("RunService")
 local Input=game:GetService("UserInputService")
 Scenes.Budget=Presets.Budget
 local active
 local function color(rgb) return Color3.fromRGB(rgb[1],rgb[2],rgb[3]) end
 local function ease(x) return 1-(1-math.clamp(x,0,1))^3 end
+local function articulatedPose(actor)
+ local root=actor:FindFirstChild("HumanoidRootPart")
+ if not root then return nil end
+ local joints,skins={},{}
+ for _,v in ipairs(actor:GetDescendants()) do
+  if v:IsA("Motor6D") and v.Part0 and v.Part1 then
+   table.insert(joints,{Joint=v,Base=v.C0,Inverse=v.C1:Inverse()})
+  elseif v:IsA("WeldConstraint") and v.Part0 and v.Part1 then
+   table.insert(skins,{v.Part0,v.Part1,v.Part0.CFrame:ToObjectSpace(v.Part1.CFrame)})
+  end
+ end
+ if #joints==0 then return nil end
+ local reached={}
+ return function(_,charge,strike,pose)
+  table.clear(reached);reached[root]=true
+  for _=1,16 do
+   local changed=false
+   for _,entry in ipairs(joints) do
+    local m=entry.Joint
+    if reached[m.Part0] and not reached[m.Part1] then
+     local name=m.Name:lower();local side=name:find("left",1,true) and -1 or 1
+     local x,y,z=0,0,0
+     if name:find("shoulder",1,true) then
+      x=pose=="strike" and ((side==1 and strike*1.1 or 0)+charge*.25) or charge*.22
+      z=side*charge*(pose=="ascend" and .55 or .13)
+     elseif name:find("elbow",1,true) then x=charge*.22
+     elseif name=="neck" then x=-charge*.08;y=pose=="calm" and charge*.1 or 0
+     elseif name=="waist" or name=="rootjoint" then x=-charge*.035
+     elseif name:find("knee",1,true) then x=-charge*.05 end
+     local localFrame=CFrame.new(entry.Base.Position)*CFrame.Angles(x,y,z)*entry.Base.Rotation
+     m.Part1.CFrame=m.Part0.CFrame*localFrame*entry.Inverse
+     reached[m.Part1]=true;changed=true
+    end
+   end
+   if not changed then break end
+  end
+  for _,skin in ipairs(skins) do skin[2].CFrame=skin[1].CFrame*skin[3] end
+ end
+end
 -- Save bind-space offsets once. Costume pieces follow their welded body segment,
 -- including loose imported meshes; no clone or rig rebuild occurs while rendering.
 local function bindPose(actor,base)
- local core={};local parts={};local all=actor:GetDescendants()
+ local articulated=articulatedPose(actor)
+ if articulated then return articulated end
+ local core={Torso=actor:FindFirstChild("Torso") or actor:FindFirstChild("UpperTorso"),Head=actor:FindFirstChild("Head"),Left=actor:FindFirstChild("Left Arm") or actor:FindFirstChild("LeftUpperArm"),Right=actor:FindFirstChild("Right Arm") or actor:FindFirstChild("RightUpperArm")}
+ local parts={};local all=actor:GetDescendants()
  for _,part in ipairs(all) do if part:IsA("BasePart") then
   local name=part.Name
-  if name=="Body" or name=="Torso" or name=="UpperTorso" then core.Torso=part
-  elseif name=="Head" then core.Head=part
-  elseif name=="Left Arm" or name=="LeftUpperArm" then core.Left=part
-  elseif name=="Right Arm" or name=="RightUpperArm" then core.Right=part
-  elseif name=="Arm" then core[part.CFrame.Position.X<base.Position.X and "Left" or "Right"]=part end
+  if not core.Torso and (name=="Body" or name=="Torso" or name=="UpperTorso") then core.Torso=part
+  elseif not core.Head and name=="Head" then core.Head=part
+  elseif not core.Left and (name=="Left Arm" or name=="LeftUpperArm") then core.Left=part
+  elseif not core.Right and (name=="Right Arm" or name=="RightUpperArm") then core.Right=part
+  elseif name=="Arm" then local side=part.CFrame.Position.X<base.Position.X and "Left" or "Right";if not core[side] then core[side]=part end end
  end end
  if not core.Torso then return function() end end
  local bases,groups={},{}
@@ -44,8 +88,8 @@ local function bindPose(actor,base)
  return function(pivot,charge,strike,pose)
   local angles={Torso=CFrame.Angles(pose=="strike" and -strike*.12 or charge*.035,0,0)}
   angles.Head=CFrame.Angles(-charge*.12,pose=="calm" and charge*.12 or 0,0)
-  angles.Left=CFrame.Angles(pose=="strike" and -charge*.6 or -charge*.22,0,-charge*(pose=="ascend" and .55 or .16))
-  angles.Right=CFrame.Angles(pose=="strike" and -strike*1.35-charge*.35 or -charge*.22,0,charge*(pose=="ascend" and .55 or .16))
+  angles.Left=CFrame.Angles(pose=="strike" and charge*.6 or charge*.22,0,-charge*(pose=="ascend" and .55 or .16))
+  angles.Right=CFrame.Angles(pose=="strike" and strike*1.35+charge*.35 or charge*.22,0,charge*(pose=="ascend" and .55 or .16))
   for _,entry in ipairs(parts) do if entry.Part.Parent then
    local group=entry.Group;local transform=bases[group]*angles[group]
    entry.Part.CFrame=pivot*transform*entry.Offset
@@ -76,7 +120,7 @@ function Scenes.Play(item,ctx)
  local connections={}
  local finished=false
  local impacted=false
- local ui,actor,view,base
+ local ui,actor,view,base,worldStage,signature,curtain
  local made=0
  local controller={Metrics={Effects=0,Particles=count,FPS=fps,Duration=duration,Shots=direction.Shots}}
  local function make(class,parent)
@@ -86,6 +130,7 @@ function Scenes.Play(item,ctx)
  local function finish(reason,alreadyDestroying)
   if finished then return end;finished=true
   for _,connection in ipairs(connections) do connection:Disconnect() end;table.clear(connections)
+  if worldStage then worldStage:Destroy() end
   if active==controller then active=nil end
   if ui and not alreadyDestroying then ui:Destroy() end
   if ctx.OnComplete then
@@ -170,6 +215,17 @@ function Scenes.Play(item,ctx)
    if preset.Motif=="orbit" or preset.Motif=="petals" then local c=make("UICorner",f);c.CornerRadius=UDim.new(1,0) end
    table.insert(particles,f)
   end
+  signature=Sets.Build(item.Id,ctx,world,make,center,height,primary,accent)
+  local stageContext=table.clone(ctx);stageContext.OnSkip=function() finish("Skipped") end
+  worldStage=Stage.Attach(view,stageContext,duration)
+  if worldStage.Enabled then
+   background.BackgroundTransparency=1;view.Position=UDim2.new();view.Size=UDim2.fromScale(1,1)
+   view.Parent=root;view.ZIndex=1
+   curtain=make("Frame",ui);curtain.Name="SceneFade";curtain.Size=UDim2.fromScale(1,1);curtain.BackgroundColor3=Color3.new(0,0,0);curtain.BorderSizePixel=0;curtain.ZIndex=30
+  end
+  controller.Metrics.Setting=signature and signature.Setting
+  controller.Metrics.Action=signature and signature.Action
+  controller.Metrics.WorldStage=worldStage.Enabled
   connectCamera()
   table.insert(connections,workspace:GetPropertyChangedSignal("CurrentCamera"):Connect(connectCamera))
   table.insert(connections,skip.Activated:Connect(function() finish("Skipped") end))
@@ -182,12 +238,14 @@ function Scenes.Play(item,ctx)
    local elapsed=math.max(0,now-started);local p=math.clamp(elapsed/duration,0,1)
    if p>=1 then finish("Completed");return end
    if not ui.Parent then finish("Closed");return end
+   worldStage:Before()
    local enter=ease(p/.06);local exit=math.clamp((p-.93)/.07,0,1)
    local charge=ease((p-.16)/.34)
    local impact=math.max(0,1-math.abs(p-.55)/.1)
    local settle=ease((p-.64)/.18)
    local power=(charge*(1-settle*.32)+impact*.3)*direction.Intensity
    root.GroupTransparency=math.max(1-enter,exit)
+   if curtain then curtain.BackgroundTransparency=1-math.max(1-enter,exit) end
    wash.BackgroundTransparency=1-impact*(.03+preset.Pulse*.1) -- a tint accent, never a white flash
    phrase.TextTransparency=math.clamp((p-.68)/.18,0,1)
    name.TextTransparency=1-ease((p-.64)/.12)
@@ -284,6 +342,8 @@ function Scenes.Play(item,ctx)
     end
     f.Position=UDim2.fromOffset(360+x,290+y);f.Size=UDim2.fromOffset(w,h);f.Rotation=rotation;f.BackgroundTransparency=math.clamp(.2+math.abs(phase-.5)*.8+exit,0,1)
    end
+   if signature then signature:Update(p,elapsed) end
+   worldStage:After(p)
   end
   table.insert(connections,Run.RenderStepped:Connect(function()
    if finished then return end

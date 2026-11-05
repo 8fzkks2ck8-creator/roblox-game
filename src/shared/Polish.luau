@@ -73,7 +73,9 @@ function P.Train(character,id)
  local joint=character:FindFirstChild("RightShoulder",true) or character:FindFirstChild("Right Shoulder",true)
  if joint and joint:IsA("Motor6D") and not pulses[joint] and not joint:GetAttribute("RiftCasting") then
   local base=joint.C0;pulses[joint]=base;joint:SetAttribute("RiftPunch",true)
-  Tween:Create(joint,TweenInfo.new(.07),{C0=base*CFrame.Angles(math.rad(55),0,math.rad(-12))}):Play()
+  -- Rotate in the body's axes, not after the R6 shoulder's 90-degree bind turn.
+  local punch=CFrame.new(base.Position)*CFrame.Angles(math.rad(45),0,math.rad(-8))*base.Rotation
+  Tween:Create(joint,TweenInfo.new(.07),{C0=punch}):Play()
   task.delay(.08,function()
    if joint.Parent then Tween:Create(joint,TweenInfo.new(.1),{C0=base}):Play() end
    task.delay(.11,function() pulses[joint]=nil;if joint.Parent then joint:SetAttribute("RiftPunch",nil) end end)

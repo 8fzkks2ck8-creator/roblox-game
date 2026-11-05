@@ -33,7 +33,9 @@ local function decorate(p)
   if replacement then
    replacement.Name=p.Name;replacement:SetAttribute("RiftCharacterId",h.Id);replacement:SetAttribute("RiftIdleId",h.Id)
    local animate=m:FindFirstChild("Animate")
-   if animate and animate:IsA("LocalScript") then animate:Clone().Parent=replacement end
+   local oldHumanoid=m:FindFirstChildOfClass("Humanoid")
+   local newHumanoid=replacement:FindFirstChildOfClass("Humanoid")
+   if animate and animate:IsA("LocalScript") and oldHumanoid and newHumanoid and oldHumanoid.RigType==newHumanoid.RigType then animate:Clone().Parent=replacement end
    replacement.Parent=workspace;replacement:PivotTo(m:GetPivot())
    p.Character=replacement;m:Destroy();return
   end

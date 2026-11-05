@@ -13,6 +13,7 @@ local Layout=require(folder:WaitForChild("ClientLayout"))
 local TitleScreen=require(folder:WaitForChild("TitleScreen"))
 local OutfitDetails=require(folder:WaitForChild("OutfitDetails"))
 local IdleMotion=require(folder:WaitForChild("IdleMotion"))
+local RigRepair=require(folder:WaitForChild("RigRepair"))
 local SummonCinematics=require(folder:WaitForChild("SummonCinematics"))
 local BrolySequence=require(folder:WaitForChild("BrolySequence"))
 local Request=folder:WaitForChild("Request"); local Event=folder:WaitForChild("Event")
@@ -361,13 +362,28 @@ local function portrait(parent,id,pos,size,spin)
  if custom and custom:IsA("Model") then
   local wm=Instance.new("WorldModel",view)
   local archivable=custom.Archivable;custom.Archivable=true
-  local cloned,display=pcall(function() return custom:Clone() end);custom.Archivable=archivable
+  local cloned,display=pcall(function()
+   if lightweight then return RigRepair.Prepare(custom,{VisualOnly=true}) end
+   return custom:Clone()
+  end);custom.Archivable=archivable
   if not cloned or not display then error("Character preview could not be cloned") end
   local descendants=display:GetDescendants()
+  if lightweight then
+   local parts=0;for _,v in ipairs(descendants) do if v:IsA("BasePart") then parts+=1 end end
+   if parts>SummonCinematics.Budget.MaxPreviewParts or #descendants>SummonCinematics.Budget.MaxPreviewDescendants then display:Destroy();error("Prepared character preview exceeds its budget") end
+  end
   for index=#descendants,1,-1 do
    local v=descendants[index]
    if v:IsA("LuaSourceContainer") or (lightweight and (v:IsA("ParticleEmitter") or v:IsA("Trail") or v:IsA("Beam") or v:IsA("Light") or v:IsA("Sound") or v:IsA("LayerCollector"))) then v:Destroy()
-   elseif v:IsA("BasePart") then v.Anchored=true;v.CanCollide=false;v.CanTouch=false end
+   elseif v:IsA("BasePart") then v.Anchored=true;v.CanCollide=false;v.CanTouch=false
+   elseif lightweight and (v:IsA("JointInstance") or v:IsA("WeldConstraint") or v:IsA("Constraint")) then
+    -- The cinematic solves these joints itself; engine constraints must not
+    -- compete with anchored preview poses when the model enters Workspace.
+    pcall(function() v.Enabled=false end)
+   elseif lightweight and v:IsA("Humanoid") then
+    v.DisplayDistanceType=Enum.HumanoidDisplayDistanceType.None
+    pcall(function() v.EvaluateStateMachine=false end)
+   end
   end
   display.Parent=wm;display:PivotTo(CFrame.new())
   local cf,sz=display:GetBoundingBox();local distance=math.max(sz.X,sz.Y,sz.Z)*2
@@ -639,7 +655,7 @@ playReveal=function(data)
   end
   -- Ordinary summon voices play on the card. Madara has dialogue inside his
   -- scene; do not follow it with a second, unrelated voice (including on Skip).
-  local hasSceneVoice=item.Id=="madara" and C.CinematicVoices and C.CinematicVoices.madara and C.CinematicVoices.madara~=""
+  local hasSceneVoice=item.Id=="madara"
   if not hasSceneVoice and data.Kind=="Character" and item.Tier>=5 and (completionReason=="Completed" or completionReason=="Skipped") then
    impactPlayed=characterSummonSound(item.Id)
   end
@@ -650,9 +666,16 @@ playReveal=function(data)
   canvas.Visible=false
   local assets=folder:FindFirstChild("Assets")
   local cinematicMeshes=assets and assets:FindFirstChild("CinematicMeshes")
+  local scenes=assets and assets:FindFirstChild("Cutscenes")
+  local sceneAssets=scenes and scenes:FindFirstChild(item.Id)
+  local meshes=sceneAssets and sceneAssets:FindFirstChild("Meshes")
+  local dialogue=sceneAssets and sceneAssets:FindFirstChild("Dialogue")
+  local voiceId=C.CinematicVoices and C.CinematicVoices[item.Id]
+  if dialogue and dialogue:IsA("Sound") then voiceId=dialogue.SoundId end
   local controller=SummonCinematics.Play(item,{
-   Parent=p:WaitForChild("PlayerGui"),Portrait=portrait,Preview=data.Preview==true,CinematicVoiceId=C.CinematicVoices and C.CinematicVoices[item.Id],
-   MeteorTemplate=cinematicMeshes and cinematicMeshes:FindFirstChild("MeteorRock"),
+   Parent=p:WaitForChild("PlayerGui"),Portrait=portrait,Preview=data.Preview==true,CinematicVoiceId=voiceId,
+   UseWorldStage=true,SceneAssets=sceneAssets,SoundVolume=C.UI.SoundVolume,Player=p,
+   MeteorTemplate=(meshes and meshes:FindFirstChild("Meteor")) or (cinematicMeshes and cinematicMeshes:FindFirstChild("MeteorRock")),
    OnImpact=function() sound("Click",.9) end,
    OnComplete=rewardCard,
   })

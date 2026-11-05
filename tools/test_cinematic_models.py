@@ -12,6 +12,9 @@ parser.add_argument("--place", type=pathlib.Path, default=ROOT / "assets/AnimeRi
 args = parser.parse_args()
 source = (ROOT / "tests/cinematic_models.luau").read_text()
 for marker, path in {
+    "__RIG_SOURCE__": "src/shared/RigRepair.luau",
+    "__STAGE_SOURCE__": "src/shared/CutsceneStage.luau",
+    "__SETS_SOURCE__": "src/shared/SignatureSets.luau",
     "__PRESETS_SOURCE__": "src/shared/SummonPresets.luau",
     "__MADARA_SOURCE__": "src/shared/MadaraSequence.luau",
     "__CINEMATICS_SOURCE__": "src/shared/SummonCinematics.luau",

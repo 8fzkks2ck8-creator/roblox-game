@@ -30,7 +30,8 @@ end)()
 local function test(rig)
  local fixed,reason=R.Prepare(rig);assert(fixed,reason)
  local motors,welds=0,0
- local core={};for _,p in fixed:GetChildren() do if p:IsA("BasePart") and (p.Name=="Torso" or p.Name=="Head" or p.Name=="HumanoidRootPart" or p.Name:find(" Arm") or p.Name:find(" Leg")) then core[p]=true end end
+ local native=fixed.Humanoid.RigType==roblox.Enum.HumanoidRigType.R15
+ local core={};for _,p in fixed:GetChildren() do if p:IsA("BasePart") and (native or p.Name=="Torso" or p.Name=="Head" or p.Name=="HumanoidRootPart" or p.Name:find(" Arm") or p.Name:find(" Leg")) then core[p]=true end end
  for _,v in fixed:GetDescendants() do
   if v:IsA("Motor6D") then motors+=1;assert(v.Part0 and v.Part1) end
   if v:IsA("WeldConstraint") then welds+=1;assert(v.Part0 and v.Part1) end
@@ -39,10 +40,18 @@ local function test(rig)
    if not core[v] then assert(v:FindFirstChild("RiftSkinWeld"),"loose cosmetic part: "..v.Name) end
   end
  end
- assert(motors==6,"expected six R6 motors")
+ assert(motors==(native and 15 or 6),"expected complete articulated skeleton")
+ local bodies,targets={},{ }
+ for _,v in fixed:GetDescendants() do if v:IsA("Motor6D") then bodies[v.Part0]=true;bodies[v.Part1]=true end end
+ for _,v in fixed:GetDescendants() do if v:IsA("WeldConstraint") then
+  assert(v.Name=="RiftSkinWeld","old competing rigid weld survived repair")
+  assert(not bodies[v.Part1] and not targets[v.Part1],"body/cosmetic constrained twice")
+  targets[v.Part1]=true
+ end end
+ for _,v in fixed:GetDescendants() do if v:IsA("BasePart") and not bodies[v] then assert(targets[v],"cosmetic lacks exactly one body attachment") end end
  assert(fixed:FindFirstChildOfClass("Humanoid") and fixed.HumanoidRootPart)
- assert(fixed:FindFirstChildOfClass("Humanoid").RigType==roblox.Enum.HumanoidRigType.R6)
- print("PASS rig repair: "..rig.Name.." (6 motors, "..welds.." skin welds)")
+ assert(native or fixed:FindFirstChildOfClass("Humanoid").RigType==roblox.Enum.HumanoidRigType.R6)
+ print("PASS rig repair: "..rig.Name.." ("..motors.." motors, "..welds.." skin welds)")
  return fixed
 end
 local fixture=Instance.new("Model");fixture.Name="Missing joints plus loose hair"

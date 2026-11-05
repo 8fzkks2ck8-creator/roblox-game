@@ -1,5 +1,5 @@
 -- Data-only summon direction. Effects are local, short, and share a fixed budget.
-local P={All={},Budget={MaxInstances=72,MaxParticles=10,MaxPreviewParts=192,MaxPreviewDescendants=1024,FPS=30}}
+local P={All={},Budget={MaxInstances=112,MaxParticles=10,MaxPreviewParts=192,MaxPreviewDescendants=1024,FPS=30}}
 local function add(id,title,motif,color,accent,count,turns,tilt,pulse,phase,seed,pose)
  P.All[id]={Title=title,Motif=motif,Color=color,Accent=accent,Count=count,Turns=turns,Tilt=tilt,Pulse=pulse,Phase=phase,Seed=seed,Pose=pose}
 end
@@ -34,9 +34,9 @@ add("broly","Emerald Detonation","burst",{130,247,65},{236,255,188},18,.95,-.11,
 add("simon","Spiral Beyond Heaven","spiral",{60,224,255},{249,99,180},18,2.15,.31,.09,3.5,126,"ascend")
 function P.Get(id) return P.All[id] end
 local directions={
- [5]={Duration=5.4,Intensity=.7,Orbit=.18,Lift=.12,Shots=4},
- [6]={Duration=7.2,Intensity=1,Orbit=.45,Lift=.28,Shots=5},
- [7]={Duration=9,Intensity=1.3,Orbit=.8,Lift=.65,Shots=6},
+ [5]={Duration=6.4,Intensity=.7,Orbit=.18,Lift=.12,Shots=4},
+ [6]={Duration=8,Intensity=1,Orbit=.45,Lift=.28,Shots=5},
+ [7]={Duration=9.6,Intensity=1.3,Orbit=.8,Lift=.65,Shots=6},
 }
 function P.Direction(tier) return directions[tier] end
 function P.Duration(tier)

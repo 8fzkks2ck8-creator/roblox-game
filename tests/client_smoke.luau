@@ -52,6 +52,7 @@ Instance.new=function(class,parent)
  local item=oldNew(class,parent)
  if guiClasses[class] then item.Visible=true;item.Rotation=0 end
  if class=="NumberValue" then item.Value=0 end
+ if class=="Camera" then item.CFrame=CFrame.new();item.FieldOfView=70;item.CameraType=Enum.CameraType.Custom;item.ViewportSize=Vector2.new(390,844) end
  if class=="ScrollingFrame" then item.CanvasPosition=Vector2.zero end
  return item
 end
@@ -81,7 +82,7 @@ local delays={}
 task.delay=function(seconds,fn) table.insert(delays,{Seconds=seconds,Fn=fn}) end
 local rs=Instance.new("ReplicatedStorage")
 local shared=Instance.new("Folder",rs);shared.Name="AnimeRift";shared:SetAttribute("ServerStatus","Ready")
-for _,name in ipairs({"Config","Polish","ClientLayout","TitleScreen","OutfitDetails","IdleMotion","SummonCinematics","BrolySequence","MadaraSequence"}) do local module=Instance.new("ModuleScript",shared);module.Name=name end
+for _,name in ipairs({"Config","Polish","ClientLayout","TitleScreen","OutfitDetails","IdleMotion","RigRepair","SummonCinematics","BrolySequence","MadaraSequence"}) do local module=Instance.new("ModuleScript",shared);module.Name=name end
 local request=Instance.new("RemoteFunction",shared);request.Name="Request"
 local events=Instance.new("RemoteEvent",shared);events.Name="Event"
 local user=Instance.new("Player");user.UserId=123
@@ -96,10 +97,14 @@ services.ProximityPromptService={PromptShown=signal(),PromptHidden=signal()}
 services.RunService.RenderStepped=signal()
 local movementBlocked=false
 services.ContextActionService={BindActionAtPriority=function() movementBlocked=true end,UnbindAction=function() movementBlocked=false end}
-workspace.CurrentCamera=Instance.new("Camera");workspace.CurrentCamera.ViewportSize=Vector2.new(390,844)
-local madaraSequence=loadstring(MADARA_SOURCE,"MadaraSequence")()
+workspace.CurrentCamera=Instance.new("Camera",workspace);workspace.CurrentCamera.ViewportSize=Vector2.new(390,844)
+local stageModule=loadstring(STAGE_SOURCE,"CutsceneStage")()
+local signatureSets=loadstring(SETS_SOURCE,"SignatureSets")()
+local madaraChunk=loadstring(MADARA_SOURCE,"MadaraSequence")
+setfenv(madaraChunk,setmetatable({script={Parent={WaitForChild=function(_,name) return name end}},require=function(name) assert(name=="CutsceneStage");return stageModule end},{__index=getfenv()}))
+local madaraSequence=madaraChunk()
 local cineChunk=loadstring(CINEMATICS_SOURCE,"SummonCinematics")
-setfenv(cineChunk,setmetatable({script={Parent={WaitForChild=function(_,name) return name end}},require=function(name) return name=="MadaraSequence" and madaraSequence or CutscenePresets end},{__index=getfenv()}))
+setfenv(cineChunk,setmetatable({script={Parent={WaitForChild=function(_,name) return name end}},require=function(name) return name=="MadaraSequence" and madaraSequence or name=="CutsceneStage" and stageModule or name=="SignatureSets" and signatureSets or CutscenePresets end},{__index=getfenv()}))
 local cinematicModule=cineChunk()
 local rageTimeline=loadstring(RAGE_TIMELINE_SOURCE,"BrolyTimeline")()
 local ragePose=loadstring(RAGE_POSE_SOURCE,"BrolyPose")()
@@ -150,7 +155,7 @@ end
 local detailsModule=loadstring(DETAILS_SOURCE,"OutfitDetails")()
 local polishStub={Aura=function() end,ClearGuard=function() end,Train=function() end,Pulse=function() end,Guard=function() end}
 require=function(target)
- if target.Name=="BrolySequence" then return rageSequence elseif target.Name=="SummonCinematics" then return cinematicModule elseif target.Name=="IdleMotion" then return idleModule elseif target.Name=="TitleScreen" then return titleModule elseif target.Name=="OutfitDetails" then return detailsModule elseif target.Name=="Config" then return C elseif target.Name=="Polish" then return polishStub elseif target.Name=="ClientLayout" then return L end
+ if target.Name=="RigRepair" then return {Prepare=function(custom) return custom:Clone() end} elseif target.Name=="BrolySequence" then return rageSequence elseif target.Name=="SummonCinematics" then return cinematicModule elseif target.Name=="IdleMotion" then return idleModule elseif target.Name=="TitleScreen" then return titleModule elseif target.Name=="OutfitDetails" then return detailsModule elseif target.Name=="Config" then return C elseif target.Name=="Polish" then return polishStub elseif target.Name=="ClientLayout" then return L end
  error("Unexpected require")
 end
 loadstring(CLIENT_SOURCE,"Client")()

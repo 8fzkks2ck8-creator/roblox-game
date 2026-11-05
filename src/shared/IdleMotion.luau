@@ -49,6 +49,42 @@ add("awakened_aizen","Chrysalis open stance","Ascend",12.7,.21,.62,.3,.19,-.045,
 add("broly","Legendary braced power","Power",7.4,.33,1.08,.29,.29,.065,.045)
 add("simon","Spiral-to-heaven resolve","Spiral",8.9,.45,1.27,.18,.29,.025,.11)
 function I.IdleProfile(id) return idles[id] end
+local walks={}
+local function walk(id,title,cadence,stride,arms,lean,sway,bob,guard)
+ walks[id]={Title=title,Cadence=cadence,Stride=stride,Arms=arms,Lean=lean,Sway=sway,Bob=bob,Guard=guard or 0}
+end
+walk("gojo","Limitless relaxed stroll",.8,.38,.18,-.015,.035,.018,.08)
+walk("madara","Warlord's measured advance",.78,.48,.12,.018,.018,.012,.12)
+walk("broly","Legendary heavy stride",.71,.59,.4,.055,.05,.028,.16)
+walk("naruto","Sage shinobi run",1.22,.59,.08,.12,.025,.022,-.32)
+walk("aizen","Sovereign's composed pace",.74,.4,.13,-.018,.02,.008,.07)
+walk("ui_goku","Instinct gliding step",.96,.47,.23,.01,.015,.006,.12)
+walk("vegeta","Royal battle march",.94,.54,.31,.055,.025,.012,.2)
+walk("ichigo","Moonfang forward stride",1.02,.55,.3,.05,.025,.019,.08)
+walk("sukuna","King's prowling walk",.84,.51,.23,.025,.045,.013,.06)
+walk("asta","Anti-magic charge",1.18,.61,.45,.1,.03,.029,.14)
+walk("yuji","Brawler's ready step",1.14,.57,.38,.07,.04,.023,.24)
+walk("deku","Full Cowling sprint",1.2,.6,.42,.105,.02,.024,.18)
+walk("jotaro","Stardust deliberate stride",.77,.45,.11,-.015,.03,.01,.035)
+walk("dio","Regal predator stride",.83,.52,.22,-.025,.045,.015,.13)
+walk("gogeta","Fusion's balanced advance",1.08,.56,.36,.04,.035,.02,.21)
+walk("vegito","Spirit swordsman's swagger",1.01,.53,.25,-.01,.05,.017,.15)
+walk("ssb_goku","Azure martial step",1.13,.58,.37,.06,.022,.019,.23)
+walk("cid","Shadow's quiet glide",.87,.46,.09,.025,.018,.005,.04)
+walk("gear5_luffy","Liberation's elastic bounce",1.16,.62,.49,.015,.07,.045,.02)
+walk("beerus","Destroyer's effortless prowl",.73,.43,.12,-.025,.04,.009,.05)
+walk("boros","Meteoric battle advance",1.06,.61,.43,.085,.045,.03,.2)
+walk("saitama","Casual hero walk",.89,.45,.28,0,.025,.018,.01)
+walk("golden_experience_requiem","Requiem's poised procession",.81,.44,.19,-.02,.027,.007,.17)
+walk("marlon","Rift sovereign march",.86,.53,.24,-.01,.04,.014,.22)
+walk("awakened_aizen","Chrysalis weightless glide",.69,.37,.1,-.03,.016,.004,.11)
+walk("simon","Spiral's determined advance",1.12,.59,.41,.075,.038,.026,.19)
+-- The rest of the roster also gets a deterministic, distinct natural gait.
+for index,id in ipairs({"yamcha","krillin","lee","renji","rukia","piccolo","kakashi","byakuya","sasuke","eren","kid_naruto","denji","yuta","ssj_goku"}) do
+ walk(id,"Fighter stride: "..id,.85+index*.018,.4+index*.009,.2+index*.009,.01+index*.003,.018+index*.001,.009+index*.001,.03+index*.005)
+end
+local defaultWalk={Title="Natural stride",Cadence=1,Stride=.5,Arms=.3,Lean=.035,Sway=.02,Bob=.018,Guard=0}
+function I.WalkProfile(id) return walks[id] or defaultWalk end
 -- Scalar returns keep the update loop free of pose-table/Instance allocations.
 function I.SampleIdle(id,role,side,elapsed)
  local p=idles[id];if not p then return 0,0,0,0 end
@@ -57,11 +93,11 @@ function I.SampleIdle(id,role,side,elapsed)
  local cycle=(elapsed/p.Cycle+p.Phase)%1
  local wave=math.sin(math.clamp((cycle-.64)/.34,0,1)*math.pi)^2
  local x,y,z,bob=0,0,0,0
- if role=="Root" then x=p.Lean+breath*.008;y=sway*.012;z=sway*.009;bob=breath*.012
+ if role=="Root" then x=-p.Lean+breath*.008;y=sway*.012;z=sway*.009;bob=breath*.012
  elseif role=="Neck" then x=-p.Lean*.4+breath*.014;y=sway*p.Look
  elseif role=="Arm" then x=-p.Raise+breath*.018;y=side*.025;z=side*(p.Spread+breath*.012)
  elseif role=="Leg" then x=-p.Lean*.2;z=-side*.018
- elseif role=="Knee" then x=.035+breath*.006
+ elseif role=="Knee" then x=-.035-breath*.006
  elseif role=="Elbow" then x=-p.Raise*.5-breath*.012
  elseif role=="Ankle" then x=p.Lean*.2 end
  local right=side==1
@@ -118,6 +154,9 @@ function I.SampleIdle(id,role,side,elapsed)
   if role=="Arm" and right then x-=wave*.72;z+=wave*.23 end
   if role=="Neck" then x-=wave*.1;y-=wave*.1 end
  end
+ -- In Roblox's body axes, +X raises a hanging arm toward the front (-Z).
+ -- Keep elbows forward too; negative flexion was pushing gestures behind rigs.
+ if role=="Arm" or role=="Elbow" then x=-x end
  return math.clamp(x,-p.MaxAngle,p.MaxAngle),math.clamp(y,-p.MaxAngle,p.MaxAngle),math.clamp(z,-p.MaxAngle,p.MaxAngle),math.clamp(bob,-p.MaxBob,p.MaxBob)
 end
 local function jointRole(joint)
@@ -142,7 +181,7 @@ function I.Mount(character,id,run,clock)
    if role then table.insert(joints,{Joint=v,Base=v.C0,Role=role,Side=side,Owned=false}) end
   end
  end
- local profile=I.Profile(id);local customIdle=I.IdleProfile(id);local connection;local last=clock();local began=last;local phase=0;local blend=0;local idleBlend=0
+ local profile=I.Profile(id);local gait=I.WalkProfile(id);local customIdle=I.IdleProfile(id);local connection;local last=clock();local began=last;local phase=0;local blend=0;local idleBlend=0
  local identity=CFrame.new()
  local function restore(entry)
   if entry.Joint.Parent and not entry.Joint:GetAttribute("RiftPunch") then
@@ -173,7 +212,7 @@ function I.Mount(character,id,run,clock)
   blend+=(target-blend)*math.min(1,dt*14)
   if blend<.003 then blend=0 end
   -- Faster travel increases cadence, rather than sliding a fixed-speed animation.
-  phase+=dt*(4+math.min(speed,28)*.45)
+  phase+=dt*(4+math.min(speed,28)*.45)*gait.Cadence
   local backwards=1
   if root and speed>.5 and root.CFrame:VectorToObjectSpace(velocity).Z>.5 then backwards=-1 end
   local walking=eligible and blend>0
@@ -188,12 +227,12 @@ function I.Mount(character,id,run,clock)
      if walking then
       local stride=math.sin(phase)*entry.Side*blend*backwards
       local x,y,z,bob=0,0,0,0
-      if role=="Arm" then x=-stride*.62;z=entry.Side*.035*blend
-      elseif role=="Leg" then x=stride*.72
-      elseif role=="Knee" then x=math.max(0,-stride)*.55
-      elseif role=="Elbow" then x=-.12*blend-math.max(0,stride)*.16
-      elseif role=="Ankle" then x=-stride*.18
-      elseif role=="Root" then x=-.035*blend;bob=(1-math.cos(phase*2))*.045*blend
+      if role=="Arm" then x=-stride*gait.Arms+gait.Guard*blend;z=entry.Side*.035*blend
+      elseif role=="Leg" then x=stride*gait.Stride
+      elseif role=="Knee" then x=-math.max(0,stride)*.55
+      elseif role=="Elbow" then x=.12*blend+math.max(0,-stride)*.16
+      elseif role=="Ankle" then x=stride*.18
+      elseif role=="Root" then x=-gait.Lean*blend;z=math.sin(phase)*gait.Sway*blend;bob=(1-math.cos(phase*2))*gait.Bob*blend
       elseif role=="Neck" then x=.025*blend;y=math.sin(phase)*.018*blend end
       -- Apply rotations in the torso's axes, before the authored joint rotation.
       -- R6 shoulders/hips have a 90-degree C0; multiplying after it twists them.
@@ -203,7 +242,10 @@ function I.Mount(character,id,run,clock)
       restore(entry)
       if idle and customIdle then
        local x,y,z,bob=I.SampleIdle(id,role,entry.Side,now-began)
-       joint.C0=CFrame.new(entry.Base.Position+Vector3.new(0,bob*idleBlend,0))*CFrame.Angles(x*idleBlend,y*idleBlend,z*idleBlend)*entry.Base.Rotation
+       -- Imported poses vary. Keep signatures subtle rather than folding a
+       -- pre-shaped mesh into itself; the repaired skeleton supplies neutral rest.
+       local weight=idleBlend*.65
+       joint.C0=CFrame.new(entry.Base.Position+Vector3.new(0,bob*weight,0))*CFrame.Angles(x*weight,y*weight,z*weight)*entry.Base.Rotation
        joint.Transform=identity;entry.Owned=true
       elseif idle and (role=="Neck" or role=="Arm") then
        local neck=role=="Neck"

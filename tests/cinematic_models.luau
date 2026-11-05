@@ -5,6 +5,8 @@ local fs=require("@lune/fs")
 local process=require("@lune/process")
 local RealInstance=roblox.Instance
 local Vector3,Vector2,CFrame=roblox.Vector3,roblox.Vector2,roblox.CFrame
+local NumberRange=roblox.NumberRange
+local NumberSequence,NumberSequenceKeypoint=roblox.NumberSequence,roblox.NumberSequenceKeypoint
 local Color3,ColorSequence,UDim2,UDim,Enum=roblox.Color3,roblox.ColorSequence,roblox.UDim2,roblox.UDim,roblox.Enum
 local made=0
 local Instance={new=function(...)
@@ -32,7 +34,10 @@ end
 roblox.implementProperty("Instance","Destroying",function(instance) return event(instance,"Destroying") end)
 roblox.implementProperty("GuiButton","Activated",function(instance) return event(instance,"Activated") end)
 roblox.implementMethod("Instance","GetPropertyChangedSignal",function(instance,name) return event(instance,name) end)
-roblox.implementMethod("Sound","Play",function() end)
+local soundsPlayed,particlesEmitted={},{}
+roblox.implementMethod("Sound","Play",function(sound) soundsPlayed[sound]=(soundsPlayed[sound] or 0)+1 end)
+roblox.implementMethod("ParticleEmitter","Emit",function(emitter,count) particlesEmitted[emitter]=(particlesEmitted[emitter] or 0)+count end)
+roblox.implementMethod("MeshPart","ApplyMesh",function(mesh,template) mesh:SetAttribute("TestAppliedMesh",template.Name) end)
 -- These methods are absent from Lune. Bounds include all eight rotated corners;
 -- pivot/scale operations apply real rigid transforms to the authored parts.
 local pivots,scales={},{}
@@ -74,19 +79,37 @@ end)
 local frames=signal()
 local input={TouchEnabled=false,InputBegan=signal()}
 local soundService=RealInstance.new("SoundService")
-local workspace={CurrentCamera=RealInstance.new("Camera"),GetPropertyChangedSignal=function(_,name) return event("workspace",name) end}
+local workspace=RealInstance.new("Workspace")
+workspace.CurrentCamera=RealInstance.new("Camera");workspace.CurrentCamera.Parent=workspace
+workspace.CurrentCamera.CameraType=Enum.CameraType.Custom
+local subject=RealInstance.new("Part");subject.Parent=workspace;workspace.CurrentCamera.CameraSubject=subject
+local actionBindings={}
 workspace.CurrentCamera.ViewportSize=Vector2.new(1920,1080)
 local services={RunService={RenderStepped=frames},UserInputService=input,SoundService=soundService,
- ContextActionService={BindActionAtPriority=function() end,UnbindAction=function() end},ContentProvider={PreloadAsync=function() end}}
+ ContextActionService={BindActionAtPriority=function(_,name,fn) actionBindings[name]=fn end,UnbindAction=function(_,name) actionBindings[name]=nil end},ContentProvider={PreloadAsync=function() end}}
 local game={GetService=function(_,name) assert(services[name],"Unexpected service: "..name);return services[name] end}
 -- Lune throws userdata for reflection failures; Roblox-style traceback handlers
 -- need the string conversion before those errors can be reported meaningfully.
 local rawDebug=debug
 local debug={traceback=function(err) return rawDebug.traceback(tostring(err)) end}
 local script={Parent={WaitForChild=function(_,name) return name end}}
+local RigRepair=(function()
+__RIG_SOURCE__
+end)()
 local Presets=(function()
 __PRESETS_SOURCE__
 end)()
+local Stage=(function()
+__STAGE_SOURCE__
+end)()
+local Sets=(function()
+__SETS_SOURCE__
+end)()
+local originalRequire=require
+local function require(name)
+ if name=="CutsceneStage" then return Stage end
+ return originalRequire(name)
+end
 local Madara=(function()
 __MADARA_SOURCE__
 end)()
@@ -98,6 +121,7 @@ __BROLY_POSE_SOURCE__
 end)()
 local realRequire=require
 local function require(name)
+ if name=="CutsceneStage" then return Stage elseif name=="SignatureSets" then return Sets end
  if name=="SummonPresets" then return Presets elseif name=="MadaraSequence" then return Madara end
  if name=="BrolyTimeline" then return Timeline elseif name=="BrolyPose" then return Pose end
  return realRequire(name)
@@ -176,7 +200,7 @@ for _,source in ipairs(models:GetChildren()) do if source:IsA("Model") then
    local camera=Instance.new("Camera");camera.Parent=realView
    viewport=viewportProxy(realView,camera)
    local world=Instance.new("WorldModel");world.Parent=realView
-   actor=source:Clone()
+   actor=assert(RigRepair.Prepare(source,{VisualOnly=true}))
    for _,part in ipairs(actor:GetDescendants()) do
     if part:IsA("LuaSourceContainer") or part:IsA("ParticleEmitter") or part:IsA("Trail") or part:IsA("Beam") or part:IsA("Light") or part:IsA("Sound") then part:Destroy()
     elseif part:IsA("BasePart") then part.Anchored=true;part.CanCollide=false end
@@ -246,7 +270,7 @@ do
    local realView=Instance.new("ViewportFrame");realView.Position=position;realView.Size=size;realView.Parent=parent
    local camera=Instance.new("Camera");camera.Parent=realView;view=viewportProxy(realView,camera)
    local world=Instance.new("WorldModel");world.Parent=realView
-   actor=source:Clone();actor.Parent=world;actor:PivotTo(CFrame.new())
+   actor=assert(RigRepair.Prepare(source,{VisualOnly=true}));actor.Parent=world;actor:PivotTo(CFrame.new())
    return view
   end,
  })
@@ -265,4 +289,87 @@ do
  end
  now=27;frames:Fire();assert(not scene:IsPlaying() and complete==1 and frames.Count()==0,"Actual Broly skill cleanup failed")
  print("PASS actual Broly Legendary Rage geometry and "..#pairs.." costume welds")
+end
+
+-- Exercise the real local-world renderer with the staged particle and sound slots.
+-- Camera selection, FX sanitization, cue counts and restoration are behavioral
+-- checks, independent of the renderer/projection stand-ins above.
+do
+ local assets=place.ReplicatedStorage.AnimeRift.Assets:FindFirstChild('Cutscenes')
+ assert(assets,'Build the current export before testing editable stage assets')
+ local savedCamera=workspace.CurrentCamera;local savedFrame=savedCamera.CFrame;local savedSubject=savedCamera.CameraSubject
+ for _,id in ipairs({'gojo','madara','broly'}) do
+  for _,ending in ipairs({'Completed','Skipped','Closed'}) do
+   local now=0;local actor,viewport;local done=0;local reason
+   local ctx={Parent=gui,UseWorldStage=true,SceneAssets=assets[id],Clock=function() return now end,
+    CinematicVoiceId='',MeteorTemplate=id=='madara' and assets[id].Meshes.Meteor or nil,
+    Portrait=function(parent,_,position,size)
+     local view=Instance.new('ViewportFrame');view.Parent=parent;view.Position=position;view.Size=size
+     local camera=Instance.new('Camera');camera.Parent=view;camera.ViewportSize=Vector2.new(1920,1080)
+     local world=Instance.new('WorldModel');world.Parent=view
+     actor=assert(RigRepair.Prepare(models[id],{VisualOnly=true}))
+     for _,v in ipairs(actor:GetDescendants()) do
+      if v:IsA('LuaSourceContainer') or v:IsA('ParticleEmitter') or v:IsA('Beam') or v:IsA('Trail') or v:IsA('Sound') then v:Destroy()
+      elseif v:IsA('BasePart') then v.Anchored=true end
+     end
+     actor.Parent=world;actor:PivotTo(CFrame.new());viewport=viewportProxy(view,camera);return viewport
+    end,
+    OnComplete=function(value) done+=1;reason=value end}
+   local scene=Scenes.Play({Id=id,Name=id,Tier=id=='broly' and 7 or 6},ctx)
+   assert(scene and scene:IsPlaying(),'world scene did not start: '..id)
+   local stage=workspace:FindFirstChild('LocalSummonStage');assert(stage,'missing real world stage')
+   assert(workspace.CurrentCamera~=savedCamera and workspace.CurrentCamera.CameraType==Enum.CameraType.Scriptable,'camera not captured')
+   assert(actionBindings.RiftSummonStage and actionBindings.RiftSummonSkip,'movement/skip actions missing')
+   assert(actor:GetDescendants()[1] and select(1,actor:GetBoundingBox()).Position.Magnitude>1000,'actor not isolated from gameplay map')
+   local before=made;local count=#stage:GetDescendants()
+   now=scene.Metrics.Duration*.7;frames:Fire()
+   assert(made==before and #stage:GetDescendants()==count,'world stage allocates per frame')
+   local fired,totalEmitters=0,0
+   for _,v in stage:GetDescendants() do
+    assert(not v:IsA('LuaSourceContainer'),'imported FX script survived sanitization')
+    if v:IsA('ParticleEmitter') then
+     totalEmitters+=1;assert(v.Enabled==false and v.Rate==0,'unbounded continuous particles')
+     assert(particlesEmitted[v] and particlesEmitted[v]>0 and particlesEmitted[v]<=40,'particle cue missing or excessive')
+    end
+   end
+   for _,v in soundService:GetChildren() do if v.Name:sub(1,8)=='Cutscene' then assert(soundsPlayed[v]==1,'SFX cue did not play once');fired+=1 end end
+   assert(totalEmitters==3 and fired==3,'missing staged particle/sound slots')
+   if ending=='Completed' then now=scene.Metrics.Duration+.1;frames:Fire()
+   elseif ending=='Skipped' then actionBindings.RiftSummonSkip('',Enum.UserInputState.Begin)
+   else event(gui:FindFirstChild('RiftSummonCutscene'),'Destroying'):Fire() end
+   assert(done==1 and reason==ending and not scene:IsPlaying(),'world scene failed to finish once')
+   assert(workspace.CurrentCamera==savedCamera and close(savedCamera.CFrame,savedFrame) and savedCamera.CameraSubject==savedSubject,'gameplay camera not restored: camera='..tostring(workspace.CurrentCamera==savedCamera)..' frame='..tostring(savedCamera.CFrame==savedFrame)..' subject='..tostring(savedCamera.CameraSubject==savedSubject)..' old='..tostring(savedFrame)..' new='..tostring(savedCamera.CFrame)..' parent='..tostring(savedCamera.Parent))
+   assert(not workspace:FindFirstChild('LocalSummonStage') and not actionBindings.RiftSummonStage and not actionBindings.RiftSummonSkip,'world stage/control leak')
+   for _,v in soundService:GetChildren() do assert(v.Name:sub(1,8)~='Cutscene','scene SFX leaked') end
+   -- Lune Destroying signals are manually supplied; remove the externally closed GUI.
+   local old=gui:FindFirstChild('RiftSummonCutscene');if old then old:Destroy() end
+   print('PASS local world scene: '..id..' / '..ending..' / pack particles, SFX, camera, controls, cleanup')
+  end
+ end
+end
+
+-- User-swapped FX are sanitized and bounded; reduced effects lowers the burst.
+do
+ local assets=RealInstance.new('Folder');assets.Name='CustomTestAssets'
+ local fx=RealInstance.new('Part');fx.Name='OpeningFX';fx.CFrame=CFrame.new();fx.Parent=assets
+ local injected=RealInstance.new('Script');injected.Name='UntrustedSample';injected.Source='error("must never execute")';injected.Parent=fx
+ for i=1,30 do local emitter=RealInstance.new('ParticleEmitter');emitter.Name='Particle'..i;emitter.Lifetime=NumberRange.new(10,20);emitter.LightEmission=1;emitter.Enabled=true;emitter.Rate=500;emitter:SetAttribute('EmitCount',999);emitter.Parent=fx end
+ for _,reduced in ipairs({false,true}) do
+  local view=RealInstance.new('ViewportFrame');local world=RealInstance.new('WorldModel');world.Parent=view
+  local body=RealInstance.new('Part');body.CFrame=CFrame.new();body.Parent=world
+  local camera=RealInstance.new('Camera');camera.CFrame=CFrame.new();camera.Parent=view
+  local projection=viewportProxy(view,camera)
+  local controller=Stage.Attach(projection,{UseWorldStage=true,SceneAssets=assets,ReducedEffects=reduced},1)
+  controller:After(.5)
+  local live=workspace:FindFirstChild('LocalSummonStage');local count,total=0,0
+  for _,v in live:GetDescendants() do
+   assert(not v:IsA('LuaSourceContainer'),'custom FX script reached Workspace')
+   if v:IsA('ParticleEmitter') then count+=1;total+=particlesEmitted[v] or 0;assert(v.Lifetime.Max<=2 and not v.Enabled and v.Rate==0,'unbounded imported emitter') end
+  end
+  assert(count==12 and total<=(reduced and 48 or 120),'custom FX exceeded burst budget')
+  controller:Destroy();controller:Destroy();assert(not workspace:FindFirstChild('LocalSummonStage'),'custom set leaked')
+  view:Destroy()
+  print('PASS custom VFX sanitization and burst/lifetime limits: reduced='..tostring(reduced))
+ end
+ assets:Destroy()
 end
