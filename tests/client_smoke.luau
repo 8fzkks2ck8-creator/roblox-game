@@ -46,7 +46,7 @@ end
 function methods:Play() end
 local guiClasses={CanvasGroup=true,Frame=true,TextLabel=true,TextButton=true,ImageLabel=true,ImageButton=true,ViewportFrame=true,ScrollingFrame=true,TextBox=true}
 local oldIsA=methods.IsA
-methods.IsA=function(self,class) return class=="GuiObject" and guiClasses[self.ClassName]==true or oldIsA(self,class) end
+methods.IsA=function(self,class) return class=="GuiObject" and guiClasses[self.ClassName]==true or class=="LuaSourceContainer" and (self.ClassName=="Script" or self.ClassName=="LocalScript" or self.ClassName=="ModuleScript") or oldIsA(self,class) end
 local oldNew=Instance.new
 Instance.new=function(class,parent)
  local item=oldNew(class,parent)
@@ -81,7 +81,7 @@ local delays={}
 task.delay=function(seconds,fn) table.insert(delays,{Seconds=seconds,Fn=fn}) end
 local rs=Instance.new("ReplicatedStorage")
 local shared=Instance.new("Folder",rs);shared.Name="AnimeRift";shared:SetAttribute("ServerStatus","Ready")
-for _,name in ipairs({"Config","Polish","ClientLayout","TitleScreen","OutfitDetails","IdleMotion","SummonCinematics","BrolySequence"}) do local module=Instance.new("ModuleScript",shared);module.Name=name end
+for _,name in ipairs({"Config","Polish","ClientLayout","TitleScreen","OutfitDetails","IdleMotion","SummonCinematics","BrolySequence","MadaraSequence"}) do local module=Instance.new("ModuleScript",shared);module.Name=name end
 local request=Instance.new("RemoteFunction",shared);request.Name="Request"
 local events=Instance.new("RemoteEvent",shared);events.Name="Event"
 local user=Instance.new("Player");user.UserId=123
@@ -97,8 +97,9 @@ services.RunService.RenderStepped=signal()
 local movementBlocked=false
 services.ContextActionService={BindActionAtPriority=function() movementBlocked=true end,UnbindAction=function() movementBlocked=false end}
 workspace.CurrentCamera=Instance.new("Camera");workspace.CurrentCamera.ViewportSize=Vector2.new(390,844)
+local madaraSequence=loadstring(MADARA_SOURCE,"MadaraSequence")()
 local cineChunk=loadstring(CINEMATICS_SOURCE,"SummonCinematics")
-setfenv(cineChunk,setmetatable({script={Parent={WaitForChild=function() return CutscenePresets end}},require=function() return CutscenePresets end},{__index=getfenv()}))
+setfenv(cineChunk,setmetatable({script={Parent={WaitForChild=function(_,name) return name end}},require=function(name) return name=="MadaraSequence" and madaraSequence or CutscenePresets end},{__index=getfenv()}))
 local cinematicModule=cineChunk()
 local rageTimeline=loadstring(RAGE_TIMELINE_SOURCE,"BrolyTimeline")()
 local ragePose=loadstring(RAGE_POSE_SOURCE,"BrolyPose")()
@@ -107,7 +108,45 @@ setfenv(rageChunk,setmetatable({script={Parent={WaitForChild=function(_,name) re
 local rageSequence=rageChunk()
 local titleModule=loadstring(TITLE_SOURCE,"TitleScreen")()
 local idleModule=loadstring(IDLE_SOURCE,"IdleMotion")()
-function methods:GetPivot() return CFrame.new() end
+-- Geometry stand-ins for deterministic authored-model fixtures; real rendering stays a Studio check.
+function methods:GetPivot() return self.LastPivot or CFrame.new() end
+function methods:GetScale() return self.TestScale or 1 end
+function methods:GetBoundingBox()
+ local lo,hi=Vector3.new(math.huge,math.huge,math.huge),Vector3.new(-math.huge,-math.huge,-math.huge)
+ local any=false
+ for _,part in ipairs(self:GetDescendants()) do if part:IsA("BasePart") then
+  any=true;local cf,size=part.CFrame or CFrame.new(),part.Size or Vector3.one
+  local a,b=cf.Position-size/2,cf.Position+size/2
+  lo=Vector3.new(math.min(lo.X,a.X),math.min(lo.Y,a.Y),math.min(lo.Z,a.Z))
+  hi=Vector3.new(math.max(hi.X,b.X),math.max(hi.Y,b.Y),math.max(hi.Z,b.Z))
+ end end
+ assert(any,"Model has no body parts")
+ return CFrame.new((lo+hi)/2),hi-lo
+end
+function methods:ScaleTo(scale)
+ local ratio=scale/self:GetScale()
+ for _,part in ipairs(self:GetDescendants()) do if part:IsA("BasePart") then
+  part.Size=(part.Size or Vector3.one)*ratio
+  local cf=part.CFrame or CFrame.new();part.CFrame=CFrame.new(cf.Position*ratio)*cf.Rotation
+ end end
+ self.TestScale=scale
+end
+function methods:PivotTo(cf)
+ local delta=cf*self:GetPivot():Inverse()
+ for _,part in ipairs(self:GetDescendants()) do if part:IsA("BasePart") then part.CFrame=delta*(part.CFrame or CFrame.new()) end end
+ self.LastPivot=cf
+end
+-- These are explicitly test fixtures, not models shipped to players or production fallbacks.
+do
+ local assets=Instance.new("Folder",shared);assets.Name="Assets"
+ local models=Instance.new("Folder",assets);models.Name="CharacterModels"
+ for _,hero in ipairs(C.Characters) do if hero.Tier>=5 then
+  local model=Instance.new("Model",models);model.Name=hero.Id
+  for _,body in ipairs({{"Head",0,1.5,0,1,1,1},{"Torso",0,0,0,2,2,1},{"Left Arm",-1.5,0,0,1,2,1},{"Right Arm",1.5,0,0,1,2,1},{"Left Leg",-.5,-2,0,1,2,1},{"Right Leg",.5,-2,0,1,2,1}}) do
+   local part=Instance.new("Part",model);part.Name=body[1];part.CFrame=CFrame.new(body[2],body[3],body[4]);part.Size=Vector3.new(body[5],body[6],body[7])
+  end
+ end end
+end
 local detailsModule=loadstring(DETAILS_SOURCE,"OutfitDetails")()
 local polishStub={Aura=function() end,ClearGuard=function() end,Train=function() end,Pulse=function() end,Guard=function() end}
 require=function(target)

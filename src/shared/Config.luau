@@ -4,6 +4,8 @@ C.Title = "ANIME RIFT"
 C.Admin = {OwnerUserId=2531251234,UserIds={1},StudioEnabled=true,Cooldown=8,Duration=15,CoinGift=250,GemGift=25}
 -- Broly's session skill: server times and rewards, optional uploaded skill audio.
 C.BrolySkill={Windup=26,Duration=20,Multiplier=3,Cooldown=90,SoundId="rbxassetid://119358500041991"}
+-- Dedicated cinematic dialogue; independent of the reward-card summon voice.
+C.CinematicVoices={madara="rbxassetid://135791921703430"}
 C.UI = {RevealShakeSeconds=1.6,WheelSeconds=4,SoundVolume=0.35,StudSlideSpeed=7,RevealSpinSpeed=35}
 C.Sounds = {
 	Click="rbxassetid://12221976",

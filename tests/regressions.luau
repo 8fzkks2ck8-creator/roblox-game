@@ -122,8 +122,10 @@ for _,hero in ipairs(C.Characters) do
  local preset=CutscenePresets.Get(hero.Id)
  if hero.Tier>=5 then
   cinematicCount+=1
-  check(preset and not titles[preset.Title] and not seeds[preset.Seed] and preset.Count<=18 and CutscenePresets.Duration(hero.Tier)<=4.4,"unique bounded cutscene preset: "..hero.Id)
+  check(preset and not titles[preset.Title] and not seeds[preset.Seed] and preset.Count<=18 and CutscenePresets.Duration(hero.Tier)<=9.6,"unique bounded cutscene preset: "..hero.Id)
   titles[preset.Title]=true;seeds[preset.Seed]=true
  else check(preset==nil,"lower tier keeps quick reveal: "..hero.Id) end
 end
 check(cinematicCount==26,"all 26 Mythic, Secret and Super Secret fighters have scenes")
+
+check(CutscenePresets.Duration(5)<CutscenePresets.Duration(6) and CutscenePresets.Duration(6)<CutscenePresets.Duration(7),"summon buildup duration escalates with rarity")

@@ -49,6 +49,12 @@ function B.Play(ctx)
   assert(view and view.CurrentCamera,"Missing Broly preview")
   view.ZIndex=2;view.LightColor=Color3.new(1,1,1);view.Ambient=Color3.fromRGB(218,231,221);view.LightDirection=Vector3.new(-1,-1,-1)
   local world=view:FindFirstChildOfClass("WorldModel");local actor=world and world:FindFirstChildOfClass("Model");assert(actor,"Missing Broly actor")
+  -- Skill cameras and the miniature stage use a six-stud actor. Imported rigs
+  -- can retain off-center pivots; normalize once before saving pose offsets.
+  local bounds,size=actor:GetBoundingBox();assert(size.Y>.01,"Empty Broly actor")
+  actor:ScaleTo(actor:GetScale()*6/size.Y)
+  bounds,size=actor:GetBoundingBox()
+  actor:PivotTo(CFrame.new(-bounds.Position)*actor:GetPivot())
   local pose=Pose.Bind(actor)
   local fx=make("Model",world);fx.Name="LegendaryRageFX"
   local green=Color3.fromRGB(104,255,49);local yellow=Color3.fromRGB(235,255,119)

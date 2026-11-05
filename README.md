@@ -2,6 +2,20 @@
 
 Download **AnimeRift_Clicker.rbxl**, open it in **Roblox Studio → File → Open from File**, and press **Play (F5)**. This version replaces the previous boss game. The original upload remains untouched in `assets/AnimeRift.original.rbxlx`, and earlier builds are available in Git history.
 
+## Latest uploaded models and summon scenes
+
+The current exports are based on the supplied `AnimeRift_Clicker (7).rbxl`, preserved unchanged as `assets/AnimeRift.with-packs.rbxl`. All 13 supplied character models, including the 96-part Broly, are retained. The PDS particle/model showcase is stored intact under `ServerStorage/AnimeRiftSourcePacks`, so its sample scripts and geometry do not run in the live plaza. A sanitized Icosphere mesh from that pack supplies Madara's meteor shapes.
+
+Madara's **Falling Heavens** is a dedicated 9.6-second scene: a rear cliff/horizon shot, a dialogue close-up with **“Too big for rain?”** and voice asset **135791921703430**, four enormous meteors descending into the valley, impact dust/shockwaves, then a full white fade. Set `C.CinematicVoices.madara` to change the line. Its audio stops on completion, Skip or cancellation; the old summon voice does not replay on the reward card. Audio permissions and exact voice synchronization require Studio testing.
+
+Other high-tier summons have staged viewport camera shots, character poses, spatial energy/debris, and rarity escalation: Mythic **5.4 seconds / four shots**, Secret **7.2 seconds / five shots**, and Super Secret **9 seconds / six shots**. Secret adds a close anticipation shot; Super Secret adds an ascension shot. The actor stays brightly lit. All camera changes remain inside the local ViewportFrame.
+
+Cinematics, skill previews and high-tier reward portraits use supplied character models only. No generated block substitute is used. Fighters without an authored model show the reward card without a cinematic; the upload supplies 13 of the 40 roster models. The clone limit is now **192 body parts / 1,024 descendants**, enough for the supplied Broly. Embedded scripts, audio and particle systems are removed from preview clones.
+
+Every equipped model receives speed-matched procedural walking on all clients, including repaired R6 carriers and R15 joints. Arms/legs counter-swing, cadence follows travel speed, and walking yields to jumping, sitting, swimming, climbing, death and punch poses. This needs no uploaded animation asset. A single unsegmented mesh cannot bend into articulated limbs; the supplied rigs were checked for joint-driven motion.
+
+All 26 Mythic-through-Super-Secret fighters have named custom idle direction, held stances and occasional gestures in `IdleMotion.IdleProfile`: Gojo's floating hand/glance, Madara's horizon survey, Broly's braced power pulses, Naruto's ready bounce, Aizen's composed glance, and other character-specific poses. Idles blend in while stationary and release joint ownership for walking and airborne/seated states; clicking retains control of the punching shoulder.
+
 ## Play loop
 
 1. Click/tap the world or use **Click + Power** to bank power. **F** also clicks when no menu or text box is active.
@@ -26,7 +40,7 @@ The roster now has **40 fighters**, including these 19 additions:
 | Secret | Beerus, Boros, Saitama, Golden Experience Requiem |
 | Super Secret | Awakened Aizen, Broly, Simon |
 
-The added fighters use stylized built-in block outfits and accessories, including caps, headbands, ears, collars, ties and capes; they do not include newly uploaded anime meshes or animation/audio assets. Inventory previews and live avatars share the same accessory builder. All additions are rollable with earned coins. Tier probabilities are unchanged; each tier's chance is divided across its expanded pool. The odds screens calculate the exact per-fighter values from the current roster. Previously owned fighters and the save-store name are preserved.
+Added fighters without supplied models still use the existing outfits during gameplay. The latest upload supplies a real Broly model; cutscenes and high-tier reward portraits never use generated block substitutes. All additions are rollable with earned coins. Tier probabilities are unchanged; each tier's chance is divided across its expanded pool. The odds screens calculate the exact per-fighter values from the current roster. Previously owned fighters and the save-store name are preserved.
 
 ## Inventory and map
 
@@ -40,25 +54,29 @@ Animations and effects include button bounce, menu transitions, reward counters,
 
 Use the existing isolated checkout; no additional Git worktree is needed. Source files live in `src/client`, `src/server` and `src/shared`. `Clicker.luau` contains server economy mutations, `Avatars.luau` handles outfits/rig swaps, and `World.luau` builds the map.
 
-Requires Python 3, the official Luau CLI/compiler, and Lune 0.11.1 for binary conversion. In the prepared cloud environment:
+Requires Python 3, official Luau 0.745 CLI/compiler, and Lune 0.11.1. Rebuild the current uploaded place with its model/VFX packs preserved:
 
 ```sh
 cd /workspace/roblox-game
-python3 tools/build_place.py \
-  --luau /workspace/scratch/luau-toolchain/luau \
-  --compiler /workspace/scratch/luau-toolchain/luau-compile
-/workspace/scratch/lune-bin/lune run tools/convert_place.luau
+/workspace/scratch/lune-bin/lune run tools/update_uploaded_place.luau \
+  assets/AnimeRift.with-packs.rbxl AnimeRift_Clicker.rbxl \
+  src/client/Client.client.luau src/shared/Config.luau \
+  src/shared/IdleMotion.luau src/shared/SummonCinematics.luau \
+  src/shared/SummonPresets.luau src/shared/MadaraSequence.luau \
+  src/shared/BrolySequence.luau
 ```
 
-On another machine, place `luau`, `luau-compile`, and `lune` on PATH, then run `python3 tools/build_place.py` and `lune run tools/convert_place.luau`. The converter also accepts explicit input/output paths. Rebuilding starts from the preserved original asset file, injects the current modules, removes the retired combat module/arena props, and serializes an edit-view map. World.Build recreates runtime attributes when Play begins. Rebuilding the XML alone does not refresh the binary; run both commands.
+The updater writes binary plus matching XML and never executes embedded scripts. It archives the showcase kit, stages its meteor mesh, injects the listed modules, and checks the complete property graph after binary roundtripping. Only Roblox's compact near-axis rotation normalization is tolerated. Other user world/asset edits are preserved. Generated place files are treated as binary in Git; editable scripts live in `src`. The older `build_place.py` pipeline starts from `assets/AnimeRift.original.rbxlx` and rebuilds the baseline map; it does not retain additions from the newer upload.
 
 Checks without rebuilding:
 
 ```sh
 python3 tools/validate.py --luau /path/to/luau --compiler /path/to/luau-compile
+python3 tools/test_cinematic_models.py --lune /path/to/lune
+python3 tools/test_locomotion.py --lune /path/to/lune --place assets/AnimeRift.with-packs.rbxl
 ```
 
-284 gameplay/UI/cinematic checks pass, plus 16 previously verified rig/clothing checks using real Roblox instance types in Lune. The suite executes the actual config, profiles, economy, map, layout, client UI and server request/receipt code with deterministic engine stand-ins. It checks odds, pending-power sales, repeated-sale/recycle protection, rebirth costs/resets/preserved collectibles, unequipped baseline power, ownership validation, profile closing, failed-save recovery, purchase receipt replay, rejection of legacy combat actions, map repeatability, six stations, six viewport sizes, search and menu wiring, title loading/Play/retry/input/camera transitions, all 19 requested rarities and roll pools, the accessory builder, and Broly's skill timing, eligibility, bonus, presentation and cleanup. The simulated DataStore outage warning is intentional. Binary conversion decodes its output again and verifies instance and script counts/sources.
+307 gameplay/UI/cinematic checks pass, plus 16 rig/clothing checks, 26 locomotion cases and 27 custom-idle checks using real Roblox instance types in Lune. The standalone cinematic geometry suite also checks all 13 uploaded rigs and the actual Broly skill model. Run `python3 tools/test_locomotion.py --lune /workspace/scratch/lune-bin/lune --place assets/AnimeRift.with-packs.rbxl` for the locomotion cases. The suite executes the actual config, profiles, economy, map, layout, client UI and server request/receipt code with deterministic engine stand-ins. It checks odds, pending-power sales, repeated-sale/recycle protection, rebirth costs/resets/preserved collectibles, unequipped baseline power, ownership validation, profile closing, failed-save recovery, purchase receipt replay, rejection of legacy combat actions, map repeatability, six stations, six viewport sizes, search and menu wiring, title loading/Play/retry/input/camera transitions, all 19 requested rarities and roll pools, the accessory builder, and Broly's skill timing, eligibility, bonus, presentation and cleanup. The simulated DataStore outage warning is intentional. Binary conversion decodes its output again and verifies instance and script counts/sources.
 
 ## Before publishing
 
@@ -71,7 +89,7 @@ Roblox Studio cannot run in this Linux workspace. Automated checks do not valida
 
 ## R6 model repair, idles and imported UI pack
 
-The loader now repairs missing R6 motors and welds loose visual pieces before unanchoring. R15-style or mesh-only models use a generated R6 carrier with their visual pieces attached to the nearest corresponding body segment. Empty models fall back to the built-in outfit. Imported scripts, old physics constraints and body movers are removed from the runtime clone; original templates remain unchanged. The current player's R6 Animate script supplies locomotion. Visible parts need to be placed correctly in the template: automatic welding cannot reconstruct an unposed mesh or restore a missing asset. Models added only in your local Studio copy must be uploaded with the place for direct inspection.
+The loader now repairs missing R6 motors and welds loose visual pieces before unanchoring. R15-style or mesh-only models use a generated R6 carrier with their visual pieces attached to the nearest corresponding body segment. Empty models fall back to the built-in outfit. Imported scripts, old physics constraints and body movers are removed from the runtime clone; original templates remain unchanged. Procedural walking supplies movement poses; the existing Animate script retains jump/fall and other states. Visible parts need to be placed correctly in the template: automatic welding cannot reconstruct an unposed mesh or restore a missing asset. Models added only in your local Studio copy must be uploaded with the place for direct inspection.
 
 Small procedural idles vary by character: composed fighters breathe and glance slowly, energetic fighters have a slightly livelier shoulder sway, and heavier fighters have a restrained stance. Walking/jumping/seated poses take priority; clicking temporarily yields the affected shoulder to the punch effect. Inventory portraits gently bob and turn. These are procedural accents, not newly uploaded character-specific animation clips.
 
@@ -89,15 +107,15 @@ Carrier conversion now moves classic Shirts, Pants, ShirtGraphics and BodyColors
 
 All **26 Mythic, Secret and Super Secret fighters** have a distinct themed reveal in `src/shared/SummonPresets.luau`. Examples include Gojo's blue/purple convergence, Sukuna's crimson cuts, Deku's emerald storm, Dio's reversing clock, Saitama's horizon burst, Broly's green detonation and Simon's rising spiral. A shared renderer combines each fighter's own palette, timing, motif, phrase and pose direction; these are short stylized viewport cinematics, not newly uploaded animation clips or story videos.
 
-Mythic scenes last **3.2 seconds**, Secret scenes **3.8 seconds**, and Super Secret scenes **4.4 seconds**. Ordinary fighters and cosmetic rolls keep their quick crate reveal. Each scene has a visible Skip button and supports Space/gamepad B. Skipping proceeds to the saved reward card; Keep dismisses it before the next queued reveal. Rewards were already committed by the server and are never granted, rerolled or equipped by the cinematic.
+Mythic scenes last **5.4 seconds**, Secret scenes **7.2 seconds**, and Super Secret scenes **9 seconds**. Madara uses his dedicated **9.6-second** sequence. Ordinary fighters and cosmetic rolls keep their quick crate reveal. Each scene has a visible Skip button and supports Space/gamepad B. Skipping proceeds to the saved reward card; Keep dismisses it before the next queued reveal. Rewards were already committed by the server and are never granted, rerolled or equipped by the cinematic.
 
 Resource limits:
 
 - One local scene at a time; no world physics, gameplay-camera takeover or new network requests.
-- At most **72 effect/UI instances**, excluding one bounded character preview, with 8–18 reusable GUI shards and three rings. No Instances are created during frame updates.
-- Cinematic previews cap imported rigs at **64 body parts / 256 descendants**. Oversized rigs use the built-in block outfit. Embedded emitters, beams, trails, lights and sounds are removed from the cinematic clone and high-tier reward-card preview.
-- Updates are capped at **30 Hz**; touch/reduced-effects mode uses **24 Hz** and at most ten shards. Background HUD previews pause while the cinematic runs.
-- Completion, Skip, respawn, replacement, setup failure and overlay removal disconnect the renderer and destroy the scene. Invalid previews still expose a fallback reward card. The impact uses a short UI click. Character voice lines start on the visible reward card only after the build-up overlay has been removed; Skip moves directly to that voice/reward phase. Closing the card stops the voice. No new audio uploads are required.
+- At most **72 effect/UI instances**, excluding one bounded character preview, with up to ten reusable GUI shards, two rings and a bounded spatial energy/debris pool. No Instances are created during frame updates.
+- Cinematic previews cap imported rigs at **192 body parts / 1,024 descendants**. Missing or oversized rigs skip the scene and show the reward card; they never use a block substitute. Embedded emitters, beams, trails, lights and sounds are removed from the cinematic clone and high-tier reward-card preview.
+- Updates are capped at **30 Hz**; touch/reduced-effects mode uses **24 Hz** and at most six shards. Background HUD previews pause while the cinematic runs.
+- Completion, Skip, respawn, replacement, setup failure and overlay removal disconnect the renderer and destroy the scene. Invalid previews still expose a fallback reward card. The impact uses a short UI click. Except for Madara's explicitly timed dialogue, character voice lines start on the visible reward card only after the build-up overlay has been removed; Skip moves directly to that voice/reward phase. Closing the card stops the voice. No new audio uploads are required.
 
 In **Studio**, press **F8 → Preview Summon Cutscenes → choose a fighter** to review all 26 without coins, tickets or rewards. Live admins can also access the local preview menu. Previews explicitly say no fighter was granted.
 
@@ -107,7 +125,7 @@ The checks include every preset's coverage/uniqueness, all 26 scene completions,
 
 The cutscene gradient now lives on its own mid-tone backdrop Frame rather than tinting the entire CanvasGroup composite. Character previews use white key lighting and bright neutral ambient light. Particles and the soft tint wash stay behind the actor, with smaller letterbox bars and faster opening visibility. These changes preserve the same local effect/preview limits.
 
-Custom voice audio no longer starts at the 52% impact cue. The sequence is **visual build-up → scene closes → reward/character card appears → voice line starts**. Normal completion and Skip both enter this final voice phase; malformed preview fallback and respawn cancellation do not start a new voice. Tests check that audio never starts during the build-up and that the overlay is gone and the HUD visible before playback begins. Actual visual/audio verification still requires Studio.
+Apart from Madara's dedicated in-scene dialogue, custom voice audio follows **visual build-up → scene closes → reward/character card appears → voice line starts**. Normal completion and Skip both enter this final voice phase; malformed preview fallback and respawn cancellation do not start a new voice. Tests check that these reward voices never start during the build-up and that the overlay is gone and the HUD visible before playback begins. Actual visual/audio verification still requires Studio.
 
 ## Broly exclusive skill: Legendary Rage
 
@@ -117,6 +135,6 @@ After the **26-second server charge**, Broly grants **3x click power for 20 seco
 
 The dedicated emote audio uses **`rbxassetid://119358500041991`** in `C.BrolySkill.SoundId` and preloads once when Broly is equipped. It plays with this skill's presentation and stops when it closes. The extracted 26-second reference audio is also saved in `assets/Broly_Legendary_Rage_audio.mp3`. Existing summon voice lines still wait until their reveal finishes. The supplied asset's playback permission, length and exact synchronization must be checked in Studio.
 
-The skill uses one local viewport actor, a maximum of **96 effect/UI instances**, and reusable energy pillars, lightning, debris, rings and sparks. It creates no Instances during frame updates. Updates run at **30 Hz**, or **24 Hz with fewer effects** on touch/reduced-effects mode. The preview keeps the existing **64 body part / 256 descendant** cap. Gameplay camera and world physics are untouched; movement/input are temporarily suspended for the presentation and restored on completion, Skip or cancellation.
+The skill uses one local viewport actor, a maximum of **96 effect/UI instances**, and reusable energy pillars, lightning, debris, rings and sparks. It creates no Instances during frame updates. Updates run at **30 Hz**, or **24 Hz with fewer effects** on touch/reduced-effects mode. The preview allows **192 body parts / 1,024 descendants**, including the supplied 96-part Broly. Gameplay camera and world physics are untouched; movement/input are temporarily suspended for the presentation and restored on completion, Skip or cancellation.
 
 In Studio, use **F8 → Preview Summon Cutscenes → Preview Broly Skill** for a local preview without owning Broly or receiving a bonus. Test the real skill with Broly equipped to check the charge, bonus and cooldown. Automated checks exercise those authority rules, costume attachment, timeline phases, fixed instance budgets, reduced effects, queued summons, audio configuration, death and cleanup. Real rendering, animation fidelity, audio permissions and device performance remain Studio/device checks.

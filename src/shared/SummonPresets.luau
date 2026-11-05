@@ -1,9 +1,9 @@
 -- Data-only summon direction. Effects are local, short, and share a fixed budget.
-local P={All={},Budget={MaxInstances=72,MaxParticles=36,MaxPreviewParts=64,MaxPreviewDescendants=256,FPS=30}}
+local P={All={},Budget={MaxInstances=72,MaxParticles=10,MaxPreviewParts=192,MaxPreviewDescendants=1024,FPS=30}}
 local function add(id,title,motif,color,accent,count,turns,tilt,pulse,phase,seed,pose)
  P.All[id]={Title=title,Motif=motif,Color=color,Accent=accent,Count=count,Turns=turns,Tilt=tilt,Pulse=pulse,Phase=phase,Seed=seed,Pose=pose}
 end
--- Mythic: one signature gesture and a restrained impact.
+-- Each tier adds a longer held shot, stronger spatial FX and a larger finishing reveal.
 add("vegeta","Royal Blue Ascension","pillar",{42,130,255},{243,210,95},12,.65,.08,.07,.15,101,"ascend")
 add("ichigo","Moonfang Crescent","slashes",{255,119,45},{60,33,84},10,.35,-.32,.08,.42,102,"strike")
 add("sukuna","Crimson Dismantle","slashes",{238,49,72},{255,178,164},16,-.55,.23,.11,.74,103,"strike")
@@ -16,7 +16,7 @@ add("dio","The Frozen Second","clock",{255,214,64},{109,240,124},16,.2,-.12,.065
 add("gogeta","Stardust Breaker","burst",{100,198,255},{255,161,88},18,1.4,.15,.09,2.93,110,"charge")
 add("vegito","Spirit Sword Radiance","pillar",{66,233,255},{255,233,133},10,-.45,-.16,.07,3.24,111,"strike")
 add("ssb_goku","Azure Kamehameha","pillar",{37,167,255},{220,252,255},14,.85,.02,.1,3.56,112,"charge")
--- Secret: a slightly longer reveal, still using the same small effect pool.
+-- Secret uses the same bounded pool, with more camera travel and a longer power-up.
 add("naruto","Sage Spiral","spiral",{255,153,49},{103,189,255},14,1.65,.18,.08,.27,113,"charge")
 add("aizen","Mirror Sovereignty","clock",{182,131,250},{247,226,174},10,-.65,-.09,.045,.59,114,"calm")
 add("ui_goku","Silver Stillness","orbit",{231,246,255},{103,193,255},12,-1.1,.035,.035,.91,115,"calm")
@@ -33,8 +33,13 @@ add("awakened_aizen","Shattered Chrysalis","petals",{239,224,255},{181,110,247},
 add("broly","Emerald Detonation","burst",{130,247,65},{236,255,188},18,.95,-.11,.13,2.46,125,"charge")
 add("simon","Spiral Beyond Heaven","spiral",{60,224,255},{249,99,180},18,2.15,.31,.09,3.5,126,"ascend")
 function P.Get(id) return P.All[id] end
+local directions={
+ [5]={Duration=5.4,Intensity=.7,Orbit=.18,Lift=.12,Shots=4},
+ [6]={Duration=7.2,Intensity=1,Orbit=.45,Lift=.28,Shots=5},
+ [7]={Duration=9,Intensity=1.3,Orbit=.8,Lift=.65,Shots=6},
+}
+function P.Direction(tier) return directions[tier] end
 function P.Duration(tier)
- if tier==5 then return 3.2 elseif tier==6 then return 3.8 elseif tier==7 then return 4.4 end
- return 0
+ local direction=directions[tier];return direction and direction.Duration or 0
 end
 return P

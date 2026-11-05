@@ -3,6 +3,10 @@
 local V={};V.__index=function(t,k) if k=="Magnitude" then return math.sqrt(t.X*t.X+t.Y*t.Y+t.Z*t.Z) end;return V[k] end
 function V.__add(a,b) return Vector3.new(a.X+b.X,a.Y+b.Y,a.Z+b.Z) end
 function V.__sub(a,b) return Vector3.new(a.X-b.X,a.Y-b.Y,a.Z-b.Z) end
+function V.__mul(a,b) if type(a)=="number" then a,b=b,a end;return Vector3.new(a.X*b,a.Y*b,a.Z*b) end
+function V.__unm(a) return Vector3.new(-a.X,-a.Y,-a.Z) end
+function V.__div(a,b) return Vector3.new(a.X/b,a.Y/b,a.Z/b) end
+function V:Lerp(b,t) return self+(b-self)*t end
 Vector3={new=function(x,y,z) return setmetatable({X=x or 0,Y=y or 0,Z=z or 0,_type="Vector3"},V) end}
 Vector3.zero=Vector3.new();Vector3.one=Vector3.new(1,1,1)
 Vector2={new=function(x,y) return {_type="Vector2",X=x,Y=y} end,zero={_type="Vector2",X=0,Y=0}}

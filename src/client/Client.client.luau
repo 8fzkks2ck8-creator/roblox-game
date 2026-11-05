@@ -355,6 +355,9 @@ local function portrait(parent,id,pos,size,spin)
   for _,item in ipairs(descendants) do if item:IsA("BasePart") then parts+=1 end end
   if #descendants>SummonCinematics.Budget.MaxPreviewDescendants or parts>SummonCinematics.Budget.MaxPreviewParts or parts==0 then custom=nil end
  end
+ -- Cinematics must use the supplied character, never a generated block substitute.
+ -- Missing/invalid assets fall back to the saved reward card through playReveal.
+ if lightweight and (not custom or not custom:IsA("Model")) then error("No authored character model for "..id) end
  if custom and custom:IsA("Model") then
   local wm=Instance.new("WorldModel",view)
   local archivable=custom.Archivable;custom.Archivable=true
@@ -628,14 +631,16 @@ playReveal=function(data)
    local ok=pcall(function() portrait(stage,item.Id,UDim2.fromOffset(175,-12),UDim2.fromOffset(240,205),item.Tier>=5 and "Light" or true) end)
    if not ok then
     for _,v in ipairs(stage:GetChildren()) do v:Destroy() end
-    label(stage,"FIGHTER SAVED",UDim2.fromScale(1,1),UDim2.new(),30,item.Color)
+    label(stage,data.Preview and "CHARACTER MODEL NOT ADDED" or "FIGHTER SAVED",UDim2.fromScale(1,1),UDim2.new(),30,item.Color)
    end
   else
    local aura=panel(stage,Vector2.new(120,120),Vector2.new(235,28),item.Color,true);corner(aura,65)
    label(aura,"AURA",UDim2.fromScale(1,1),UDim2.new(),27)
   end
-  -- The build-up has fully ended and its overlay is gone before the voice starts.
-  if data.Kind=="Character" and item.Tier>=5 and (completionReason=="Completed" or completionReason=="Skipped") then
+  -- Ordinary summon voices play on the card. Madara has dialogue inside his
+  -- scene; do not follow it with a second, unrelated voice (including on Skip).
+  local hasSceneVoice=item.Id=="madara" and C.CinematicVoices and C.CinematicVoices.madara and C.CinematicVoices.madara~=""
+  if not hasSceneVoice and data.Kind=="Character" and item.Tier>=5 and (completionReason=="Completed" or completionReason=="Skipped") then
    impactPlayed=characterSummonSound(item.Id)
   end
   if not impactPlayed then sound("Reward",1.4) end
@@ -643,8 +648,11 @@ playReveal=function(data)
  if data.Kind=="Character" and item.Tier>=5 then
   local focused=Input:GetFocusedTextBox();if focused then focused:ReleaseFocus() end
   canvas.Visible=false
+  local assets=folder:FindFirstChild("Assets")
+  local cinematicMeshes=assets and assets:FindFirstChild("CinematicMeshes")
   local controller=SummonCinematics.Play(item,{
-   Parent=p:WaitForChild("PlayerGui"),Portrait=portrait,Preview=data.Preview==true,
+   Parent=p:WaitForChild("PlayerGui"),Portrait=portrait,Preview=data.Preview==true,CinematicVoiceId=C.CinematicVoices and C.CinematicVoices[item.Id],
+   MeteorTemplate=cinematicMeshes and cinematicMeshes:FindFirstChild("MeteorRock"),
    OnImpact=function() sound("Click",.9) end,
    OnComplete=rewardCard,
   })

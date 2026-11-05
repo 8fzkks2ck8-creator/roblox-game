@@ -1,8 +1,8 @@
 -- Real cinematic module with deterministic time and the same UI engine stand-ins.
-local function preview(parent)
+local function preview(parent,id)
  local view=Instance.new("ViewportFrame",parent)
  local world=Instance.new("WorldModel",view)
- Instance.new("Model",world)
+ local model=shared.Assets.CharacterModels:FindFirstChild(id or "gojo"):Clone();model.Parent=world
  view.CurrentCamera=Instance.new("Camera",view);view.CurrentCamera.FieldOfView=34
  return view
 end
@@ -79,35 +79,53 @@ findButton("KEEP IT!").Activated:Fire()
 check(playerGui:FindFirstChild("RiftSummonCutscene")~=nil,"queued high-tier reveal waits until the first card is dismissed")
 skipActive();findButton("KEEP IT!").Activated:Fire()
 check(not playerGui:FindFirstChild("RiftSummonCutscene") and services.RunService.RenderStepped:Count()==renderBefore and data.Coins==coinsBefore and data.Equipped==equippedBefore,"queued cutscenes release their renderer without currency or equip changes")
--- A bad model must still expose Keep, with one reward sound and no duplicate card.
-local sceneAssets=shared:FindFirstChild("Assets") or Instance.new("Folder",shared);sceneAssets.Name="Assets"
-local models=Instance.new("Folder",sceneAssets);models.Name="CharacterModels"
-local badRig=Instance.new("Model",models);badRig.Name="gojo"
-local badPart=Instance.new("Part",badRig);badPart.Size=Vector3.one
-local soundsBefore=#services.SoundService:GetChildren()
-events.OnClientEvent:Fire("Reveal",{Kind="Character",Id="gojo"})
-check(canvas.Visible and not playerGui:FindFirstChild("RiftSummonCutscene") and #services.SoundService:GetChildren()==soundsBefore+1,"preview setup failure shows one fallback reward card and sound")
-findButton("KEEP IT!").Activated:Fire()
-badRig:Destroy()
+-- Missing/malformed/oversized authored models never become a block-model cinematic.
+local sceneAssets=shared:FindFirstChild("Assets")
+local models=sceneAssets:FindFirstChild("CharacterModels")
+do
+ local original=models:FindFirstChild("gojo");original.Parent=nil
+ local badRig=Instance.new("Model",models);badRig.Name="gojo"
+ local soundsBefore=#services.SoundService:GetChildren()
+ events.OnClientEvent:Fire("Reveal",{Kind="Character",Id="gojo"})
+ check(canvas.Visible and not playerGui:FindFirstChild("RiftSummonCutscene") and #services.SoundService:GetChildren()==soundsBefore+1,"empty authored model shows one fallback reward card and sound")
+ findButton("KEEP IT!").Activated:Fire();badRig:Destroy()
+ events.OnClientEvent:Fire("Reveal",{Kind="Character",Id="gojo"})
+ check(canvas.Visible and not playerGui:FindFirstChild("RiftSummonCutscene") and not findButton("KEEP IT!").Parent:FindFirstChildOfClass("Frame"):FindFirstChildOfClass("ViewportFrame"),"missing authored model never creates a placeholder preview")
+ findButton("KEEP IT!").Activated:Fire();original.Parent=models
+end
 
--- Bound imported rigs as well as GUI effects, including the result-card preview.
-local huge=Instance.new("Model",models);huge.Name="broly"
-for i=1,65 do Instance.new("Part",huge).Name="Part"..i end
-local cloneImplementation=methods.Clone
-methods.Clone=function(self) assert(self~=huge,"oversized cinematic rig was cloned");return cloneImplementation(self) end
-events.OnClientEvent:Fire("Reveal",{Kind="Character",Id="broly"})
-check(playerGui:FindFirstChild("RiftSummonCutscene")~=nil,"oversized custom rig uses the lightweight built-in preview")
-skipActive();findButton("KEEP IT!").Activated:Fire();huge:Destroy();methods.Clone=cloneImplementation
-local currentBox=methods.GetBoundingBox
-methods.GetBoundingBox=function() local cf=CFrame.new();cf.Position=Vector3.zero;return cf,Vector3.new(2,6,2) end
-local noisy=Instance.new("Model",models);noisy.Name="gojo"
-Instance.new("Part",noisy).Size=Vector3.one
-Instance.new("ParticleEmitter",noisy);Instance.new("Sound",noisy)
-events.OnClientEvent:Fire("Reveal",{Kind="Character",Id="gojo"})
-local cleanPreview=true
-for _,item in ipairs(playerGui:FindFirstChild("RiftSummonCutscene"):GetDescendants()) do if item.ClassName=="ParticleEmitter" or item.ClassName=="Sound" then cleanPreview=false end end
-check(cleanPreview,"embedded model particles and sounds cannot bypass the cinematic budget")
-skipActive();findButton("KEEP IT!").Activated:Fire();noisy:Destroy();methods.GetBoundingBox=currentBox
+do
+ local original=models:FindFirstChild("broly");original.Parent=nil
+ local huge=Instance.new("Model",models);huge.Name="broly"
+ for i=1,CutscenePresets.Budget.MaxPreviewParts+1 do local p=Instance.new("Part",huge);p.Name="Part"..i;p.Size=Vector3.one;p.CFrame=CFrame.new() end
+ local cloneImplementation=methods.Clone
+ methods.Clone=function(self) assert(self~=huge,"oversized cinematic rig was cloned");return cloneImplementation(self) end
+ events.OnClientEvent:Fire("Reveal",{Kind="Character",Id="broly"})
+ check(canvas.Visible and not playerGui:FindFirstChild("RiftSummonCutscene"),"oversized authored rig shows the reward card without a placeholder cinematic")
+ findButton("KEEP IT!").Activated:Fire();huge:Destroy();methods.Clone=cloneImplementation;original.Parent=models
+end
+-- The uploaded Broly has 96 body/mesh parts: this used to silently become a placeholder.
+do
+ local original=models:FindFirstChild("broly");original.Parent=nil
+ local dense=Instance.new("Model",models);dense.Name="broly"
+ for i=1,96 do local p=Instance.new("Part",dense);p.Name="Mesh"..i;p.Size=Vector3.one;p.CFrame=CFrame.new(i%6,i%8,i%3) end
+ local cloned=false;local cloneImplementation=methods.Clone
+ methods.Clone=function(self) if self==dense then cloned=true end;return cloneImplementation(self) end
+ events.OnClientEvent:Fire("Reveal",{Kind="Character",Id="broly"})
+ check(cloned and playerGui:FindFirstChild("RiftSummonCutscene")~=nil,"96-part imported Broly uses its actual model within the preview cap")
+ skipActive();findButton("KEEP IT!").Activated:Fire();dense:Destroy();methods.Clone=cloneImplementation;original.Parent=models
+end
+-- Embedded emitters/audio/scripts are stripped from an actual supplied model.
+do
+ local original=models:FindFirstChild("gojo");original.Parent=nil
+ local noisy=original:Clone();noisy.Parent=models
+ Instance.new("ParticleEmitter",noisy);Instance.new("Sound",noisy);Instance.new("Script",noisy)
+ events.OnClientEvent:Fire("Reveal",{Kind="Character",Id="gojo"})
+ local cleanPreview=true
+ for _,item in ipairs(playerGui:FindFirstChild("RiftSummonCutscene"):GetDescendants()) do if item.ClassName=="ParticleEmitter" or item.ClassName=="Sound" or item.ClassName=="Script" then cleanPreview=false end end
+ check(cleanPreview,"embedded model particles, audio and scripts cannot bypass the cinematic budget")
+ skipActive();findButton("KEEP IT!").Activated:Fire();noisy:Destroy();original.Parent=models
+end
 scene,step,outcome=startScene("sukuna")
 step(0)
 local viewport=playerGui:FindFirstChild("RiftSummonCutscene"):FindFirstChildOfClass("CanvasGroup"):FindFirstChild("CinematicStage"):FindFirstChildOfClass("ViewportFrame")
